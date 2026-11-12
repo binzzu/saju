@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <path d="M10 26 L14 4 L30 18 Z M54 26 L50 4 L34 18 Z" fill="#2E2245" stroke="#2A1B3D" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M14 22 L16 10 L25 18 Z M50 22 L48 10 L39 18 Z" fill="#FF9EC4"/>
+  <circle cx="32" cy="38" r="24" fill="#D7263D" stroke="#2A1B3D" stroke-width="3"/>
+  <text x="32" y="48" font-family="serif" font-weight="900" font-size="28" text-anchor="middle" fill="#FFF3D6">緣</text>
+</svg>

@@ -1,0 +1,17 @@
+{
+  "name": "myoyeon-saju",
+  "version": "1.0.0",
+  "private": true,
+  "description": "묘연의 연애사주 — 웹툰으로 보는 연애 사주·궁합·상담",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0"
+  }
+}
