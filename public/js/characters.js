@@ -1,7 +1,8 @@
 // 웹툰 캐릭터 — 사용자 제공 일러스트를 배경 없이 잘라 쓴다 (public/img/*.webp)
 // 묘연: 검은 단발 + 보라 브릿지, 금빛 눈, 초승달 초커, 검은 크롭탑·숏팬츠 (사주방 주인)
 // 코코: 은발 롱헤어 + 하늘색 리본, 파란 눈, 방울 초커, 흰 오프숄더 크롭탑·미니스커트 (조수)
-// 일러스트는 표정이 하나라서, 감정은 머리 옆의 만화 기호(땀방울·하트·물음표 등)로 표현한다.
+// 표정 10종은 원본 위에 눈·입을 다시 그려 만든 변형 그림(img/expr/)이고, 머리 옆 만화 기호로 감정을 한 번 더 강조한다.
+// 변형 그림 생성 도구: tools/expressions/
 
 const INK = '#2A1B3D';
 
@@ -10,9 +11,8 @@ export const CHARACTERS = {
     name: '묘연',
     role: '사주방 주인 · 검은 고양이',
     bio: '장난기 많고 거침없지만, 연애 고민 앞에선 누구보다 다정한 점술사.',
-    bust: { src: 'img/myo-bust.webp', w: 403, h: 470 },
+    bust: { w: 403, h: 470 },
     full: { src: 'img/myo-full.webp', w: 570, h: 1015 },
-    face: 'img/myo-face.webp',
     // 감정 기호 위치 (그림 폭·높이 대비 %)
     emote: { x: 0, y: 12 },
   },
@@ -20,9 +20,8 @@ export const CHARACTERS = {
     name: '코코',
     role: '묘연의 조수 · 하얀 고양이',
     bio: '수줍음이 많은 조수. 어려운 사주 용어를 대신 물어봐 줘요.',
-    bust: { src: 'img/coco-bust.webp', w: 435, h: 520 },
+    bust: { w: 435, h: 520 },
     full: { src: 'img/coco-full.webp', w: 610, h: 1012 },
-    face: 'img/coco-face.webp',
     emote: { x: 76, y: 2 },
   },
 };
@@ -73,7 +72,7 @@ export function drawCharacter(key, expr = 'smile', opts = {}) {
   const c = CHARACTERS[key];
   const e = c.emote;
   return `<div class="char char--bust ${opts.className || ''}" role="img" aria-label="${opts.title || c.name}" style="--ex:${e.x}%;--ey:${e.y}%">
-    <img class="char__img" src="${c.bust.src}" width="${c.bust.w}" height="${c.bust.h}" alt="" loading="lazy" decoding="async">
+    <img class="char__img" src="img/expr/${key}-${EMOTES[expr] === undefined ? 'smile' : expr}.webp" width="${c.bust.w}" height="${c.bust.h}" alt="" loading="lazy" decoding="async">
     ${emoteSvg(expr)}
   </div>`;
 }
@@ -84,8 +83,8 @@ export function fullBody(key, { eager = false } = {}) {
   return `<img class="char__full" src="${c.full.src}" width="${c.full.w}" height="${c.full.h}" alt="${c.name}: ${c.role}" ${eager ? '' : 'loading="lazy"'} decoding="async">`;
 }
 
-/** 상담실 아바타 (얼굴) */
-export function faceAvatar(key) {
-  const c = CHARACTERS[key];
-  return `<img class="char char--face" src="${c.face}" width="256" height="256" alt="" decoding="async">`;
+/** 상담실 아바타 (묘연 얼굴, 표정별) */
+export function faceAvatar(key, expr = 'smile') {
+  const e = EMOTES[expr] === undefined ? 'smile' : expr;
+  return `<img class="char char--face" src="img/expr/${key}-${e}-face.webp" width="256" height="256" alt="" decoding="async">`;
 }

@@ -9,6 +9,7 @@ import { createCounselor, starterChips } from './counsel.js';
 import { lunarToSolar, lunarMonthInfo } from './lunar.js';
 import { escapeHtml as esc, renderRich, josa, hasBatchim } from './text.js';
 import { SYSTEM_PROMPT, contextBlock, todayKST } from './persona.js';
+import { HOUR_LABELS } from './saju.js';
 
 /* ───────────── 상태 ───────────── */
 
@@ -88,6 +89,43 @@ const stemLabel = (s) => `${STEMS[s]}(${STEMS_KO[s]})`;
 const elLabel = (e) => `${ELEMENT_KO[e]}(${ELEMENT_INFO[e].name})`;
 const monthLabel = (m, baseYear) => (m.year !== baseYear ? `${m.year}년 ${m.month}월` : `${m.month}월`);
 
+/* ───────────── 24시간 시각 입력 ───────────── */
+
+// 입력 중: 숫자만 쳐도 "0102" → "01:02" 로 콜론을 넣는다
+function formatTimeTyping(raw) {
+  if (raw.includes(':')) {
+    const [h, m = ''] = raw.split(':');
+    return `${h.replace(/\D/g, '').slice(0, 2)}:${m.replace(/\D/g, '').slice(0, 2)}`;
+  }
+  const d = raw.replace(/\D/g, '').slice(0, 4);
+  return d.length <= 2 ? d : `${d.slice(0, 2)}:${d.slice(2)}`;
+}
+
+// 입력을 마치면: "1:2" → "01:02", "9" → "09:00"
+function normalizeTime(v) {
+  const s = String(v).trim();
+  let m = /^(\d{1,2}):(\d{1,2})$/.exec(s);
+  if (m) return `${m[1].padStart(2, '0')}:${m[2].padStart(2, '0')}`;
+  m = /^(\d{1,2})$/.exec(s);
+  if (m) return `${m[1].padStart(2, '0')}:00`;
+  return s;
+}
+
+function parseTime(v) {
+  const m = /^(\d{2}):(\d{2})$/.exec(v);
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2]);
+  return h <= 23 && mi <= 59 ? { h, m: mi } : null;
+}
+
+// 시진(時辰): 동경 127.5° 기준이라 한국 표준시로는 매시 30분에 바뀐다 (자시 23:30~01:29)
+function timeHint(v) {
+  const t = parseTime(v);
+  if (!t) return '24시간 기준으로 적어 주세요. 오후 3시 30분은 15:30, 새벽 1시 2분은 01:02예요.';
+  const idx = Math.floor((((t.h * 60 + t.m - 30) % 1440 + 1440) % 1440 + 60) / 120) % 12;
+  return `🕐 ${v} → <b>${HOUR_LABELS[idx]}</b>에 태어났어요. 서머타임·지역 시차는 자동으로 보정해요.`;
+}
+
 /* ───────────── 부적 신청서 ───────────── */
 
 function talisman(kind, person) {
@@ -134,10 +172,11 @@ function talisman(kind, person) {
     <div class="field">
       <label for="${id('time')}">태어난 시간</label>
       <div class="time-row">
-        <input class="input" type="time" id="${id('time')}" name="time" value="${time}" ${v.name && !v.timeKnown ? 'disabled' : ''}>
+        <input class="input input--time" type="text" inputmode="numeric" autocomplete="off" maxlength="5" placeholder="예: 01:02"
+          id="${id('time')}" name="time" value="${time}" aria-describedby="${id('time-hint')}" ${v.name && !v.timeKnown ? 'disabled' : ''}>
         <label class="check"><input type="checkbox" name="unknown" ${v.name && !v.timeKnown ? 'checked' : ''}> 시간을 몰라요</label>
       </div>
-      <p class="hint">한국 표준시 기준으로 적어 주세요. 서머타임·지역 시차는 자동으로 보정해요.</p>
+      <p class="hint" id="${id('time-hint')}" data-time-hint>${v.name && !v.timeKnown ? '시간을 모르면 시주 없이 여섯 글자로 풀이해요.' : timeHint(time)}</p>
     </div>
     ${isMe ? `<fieldset class="field">
       <legend>지금 내 연애 상태</legend>
@@ -184,9 +223,10 @@ function readForm(form) {
   if (Date.UTC(solar.year, solar.month - 1, solar.day) > Date.now()) return { error: '미래의 날짜는 볼 수 없어요.', focus: 'year' };
   let hour = null, minute = null;
   if (!unknown) {
-    const m = /^(\d{1,2}):(\d{2})/.exec(time);
-    if (!m) return { error: '태어난 시간을 적거나 "시간을 몰라요"를 체크해 주세요.', focus: 'time' };
-    hour = Number(m[1]); minute = Number(m[2]);
+    if (!time.trim()) return { error: '태어난 시간을 적거나 "시간을 몰라요"를 체크해 주세요.', focus: 'time' };
+    const t = parseTime(normalizeTime(time));
+    if (!t) return { error: '태어난 시간은 24시간 기준으로 00:00~23:59 사이로 적어 주세요. (예: 오후 3시 30분 → 15:30)', focus: 'time' };
+    hour = t.h; minute = t.m;
   }
   const person = { name, gender, calendar, leap: calendar === 'lunar' && leap, year, month, day, hour, minute, timeKnown: !unknown };
   if (f.has('status')) person.status = f.get('status') || 'solo';
@@ -759,6 +799,25 @@ app.addEventListener('submit', (ev) => {
   }
 });
 
+app.addEventListener('input', (ev) => {
+  const t = ev.target;
+  const form = t.closest('form.talisman');
+  if (!form) return;
+  // 오류 문구는 입력하는 동안 지운다 (버튼을 누를 때 지우면 레이아웃이 밀려 탭이 빗나감)
+  form.querySelector('.form-error').textContent = '';
+  if (t.name !== 'time') return;
+  const next = formatTimeTyping(t.value);
+  if (next !== t.value) t.value = next;
+  t.closest('form').querySelector('[data-time-hint]').innerHTML = timeHint(t.value);
+});
+
+app.addEventListener('focusout', (ev) => {
+  const t = ev.target;
+  if (t.name !== 'time' || !t.closest('form.talisman') || !t.value) return;
+  t.value = normalizeTime(t.value);
+  t.closest('form').querySelector('[data-time-hint]').innerHTML = timeHint(t.value);
+});
+
 app.addEventListener('change', (ev) => {
   const t = ev.target;
   const form = t.closest('form.talisman');
@@ -767,6 +826,7 @@ app.addEventListener('change', (ev) => {
     const time = form.querySelector('[name="time"]');
     time.disabled = t.checked;
     if (t.checked) time.value = '';
+    form.querySelector('[data-time-hint]').innerHTML = t.checked ? '시간을 모르면 시주 없이 여섯 글자로 풀이해요.' : timeHint(time.value);
   }
   if (t.name === 'calendar') {
     form.querySelector('[data-leap]').hidden = t.value !== 'lunar';
@@ -793,6 +853,7 @@ app.addEventListener('click', (ev) => {
     form.querySelector('[name="time"]').disabled = false;
     form.querySelector('[data-leap]').hidden = true;
     form.querySelector('.form-error').textContent = '';
+    form.querySelector('[data-time-hint]').innerHTML = timeHint('');
     form.scrollIntoView({ block: 'start' });
     form.querySelector('[name="name"]').focus();
   }
