@@ -1,4 +1,4 @@
-import { drawCharacter, faceAvatar } from './characters.js';
+import { drawCharacter, faceAvatar, fullBody, CHARACTERS } from './characters.js';
 import {
   analyzePerson, buildForecast, formatBirth, summaryForAI, computeDaewoon, dailyLove,
   ELEMENT_INFO, CHARMS, DAY_MASTERS, LUCK, STATUS_LABEL,
@@ -63,7 +63,7 @@ const NAMES = { myo: '묘연', coco: '코코' };
 
 function talk(who, expr, html, { side = 'left', scene = 'pink', sfx = '', sfxPos = '', caption = '' } = {}) {
   const right = side === 'right';
-  const art = drawCharacter(who, expr, { flip: right, title: `${NAMES[who]} (${expr})` });
+  const art = drawCharacter(who, expr, { title: NAMES[who] });
   return `<section class="panel scene-${scene}">
     ${caption ? `<p class="caption">${caption}</p>` : ''}
     <div class="talk ${right ? 'is-right' : ''}">
@@ -195,9 +195,24 @@ function readForm(form) {
 
 /* ───────────── 화면: 처음 ───────────── */
 
+function cover() {
+  const cast = ['myo', 'coco'].map((k) => `<figure class="cover__char cover__char--${k}">
+      ${fullBody(k, { eager: true })}
+      <figcaption><b>${CHARACTERS[k].name}</b><span>${CHARACTERS[k].role}</span></figcaption>
+    </figure>`).join('');
+  return `<section class="panel scene-night cover">
+    <div class="cover__head">
+      <span class="cover__seal" aria-hidden="true">緣</span>
+      <h1 class="cover__title">묘연<small>의</small> 연애사주</h1>
+      <p class="cover__sub">고양이 점술사들이 웹툰으로 풀어 주는 연애 사주 · 궁합 · 1:1 상담</p>
+    </div>
+    <div class="cover__cast">${cast}</div>
+  </section>`;
+}
+
 function viewHome() {
   const a = me();
-  let html = '';
+  let html = cover();
   html += talk('myo', 'smile', p('어서 와라냥. 여기는 인연(緣)을 읽어 주는 <strong>묘연 사주방</strong>이야.') + p('연애운, 궁합, 고민 상담까지 전부 웹툰으로 쉽게 풀어 줄게.'), { scene: 'night', sfx: '딸랑♪', caption: '골목 끝, 방울 소리가 나는 작은 점집' });
   if (a) {
     html += talk('coco', 'sparkle', p(`앗, <strong>${esc(a.name)}님</strong> 다시 왔네요! 저장해 둔 사주로 바로 볼까요?`), { side: 'right', scene: 'mint' });
