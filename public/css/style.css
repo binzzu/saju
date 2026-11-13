@@ -512,7 +512,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .toast {
   position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); z-index: 40;
   transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
-  max-width: min(92vw, 420px); padding: 10px 16px; border: 2.5px solid var(--ink); border-radius: 14px;
+  width: max-content; max-width: min(92vw, 420px); padding: 10px 16px; border: 2.5px solid var(--ink); border-radius: 14px;
   background: var(--talisman); box-shadow: 0 4px 0 var(--ink); font-size: var(--s-2); text-align: center;
   transition: opacity .2s, transform .2s;
 }
@@ -536,3 +536,58 @@ button, input, select, textarea { font: inherit; color: inherit; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .talisman.is-stamped .imprint { opacity: .8; }
 }
+
+/* ───────── 프리셋 · 처음으로 ───────── */
+.start { scroll-margin-top: 64px; }
+.mini {
+  display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; min-height: 34px;
+  border: 2px solid var(--ink); border-radius: 999px; background: var(--paper); color: var(--ink);
+  font-family: var(--f-display); font-size: var(--s-1); line-height: 1.3; white-space: nowrap;
+  text-decoration: none; cursor: pointer; box-shadow: 0 2px 0 var(--ink);
+}
+.mini:active { transform: translateY(2px); box-shadow: none; }
+.mini--pink { background: var(--blush); }
+.mini--done { background: var(--mint); box-shadow: none; cursor: default; }
+
+.presets { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 9px; }
+.preset {
+  display: grid; grid-template-columns: 1fr auto; border: 2.5px solid var(--ink); border-radius: 14px;
+  background: var(--paper); overflow: hidden; box-shadow: 0 3px 0 var(--ink);
+}
+.preset.is-current { background: var(--blush-soft); }
+.preset__open {
+  display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 10px; min-width: 0;
+  padding: 9px 4px 9px 12px; border: 0; background: none; text-align: left; cursor: pointer;
+}
+.preset__open:hover .preset__go { transform: translateX(3px); }
+.preset__emoji { font-size: 27px; line-height: 1; text-align: center; }
+.preset__body { display: grid; min-width: 0; }
+.preset__name { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-family: var(--f-display); font-size: var(--s-4); line-height: 1.25; }
+.preset__name small { font-family: var(--f-body); font-size: var(--s-1); color: #6E5E85; }
+.preset__name .tag { margin: 0; }
+.preset__meta { font-size: var(--s-1); color: #5B4A72; font-variant-numeric: tabular-nums; }
+.preset__go { font-family: var(--f-display); font-size: 26px; color: var(--blush); transition: transform .15s; }
+.preset__del {
+  width: 46px; border: 0; border-left: 2px dashed #2A1B3D40; background: none;
+  font-size: 22px; color: #8A7AA0; cursor: pointer;
+}
+.preset__del:hover, .preset__del:focus-visible { color: var(--cinnabar); background: #FFF0F3; }
+
+.viewing { margin: 0 0 var(--gutter); padding: 10px 12px; border-radius: 14px; background: #ffffff14; color: #fff; }
+.viewing__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.viewing__who { font-size: var(--s-2); }
+.viewing__who b { font-family: var(--f-display); font-weight: 400; font-size: var(--s-4); color: var(--talisman); }
+.viewing__btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.viewing__switch {
+  display: flex; align-items: center; gap: 6px; margin-top: 10px; padding: 2px 2px 4px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.viewing__switch::-webkit-scrollbar { display: none; }
+.viewing__switch > span { font-size: var(--s-1); color: #CBBCEB; white-space: nowrap; }
+.pchips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+.talisman__top { position: relative; display: flex; justify-content: flex-end; margin: -6px -4px 4px; }
+.talisman__tools { position: relative; display: flex; justify-content: center; margin-top: 16px; }
+
+.toast.has-action { display: flex; align-items: center; gap: 12px; pointer-events: auto; text-align: left; }
+.toast.has-action .mini { flex: none; }

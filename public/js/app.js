@@ -10,6 +10,9 @@ import { lunarToSolar, lunarMonthInfo } from './lunar.js';
 import { escapeHtml as esc, renderRich, josa, hasBatchim } from './text.js';
 import { SYSTEM_PROMPT, contextBlock, todayKST } from './persona.js';
 import { HOUR_LABELS } from './saju.js';
+import {
+  PRESET_LIMIT, personKey, loadPresets, findPreset, upsertPreset, removePreset, restorePreset, shortBirth,
+} from './presets.js';
 
 /* ───────────── 상태 ───────────── */
 
@@ -24,6 +27,7 @@ const state = {
   me: store.get('me'),
   partner: store.get('partner'),
   chat: store.get('chat') || [],
+  presets: loadPresets(store.get('presets')), // 프리셋(인연 수첩): 저장해 둔 사람들
   ai: null, // null | 'server'(Node + API 키) | 'artifact'(Claude 아티팩트의 sample)
   sample: null,
   busy: false,
@@ -33,7 +37,7 @@ const memo = {};
 function me() {
   if (!state.me) return null;
   if (!memo.me) {
-    memo.me = analyzePerson(state.me);
+    memo.me = analyzeCached(state.me);
     memo.fc = memo.me ? buildForecast(memo.me) : null;
   }
   return memo.me;
@@ -41,7 +45,7 @@ function me() {
 function forecast() { me(); return memo.fc; }
 function partner() {
   if (!state.partner) return null;
-  if (!memo.partner) memo.partner = analyzePerson(state.partner);
+  if (!memo.partner) memo.partner = analyzeCached(state.partner);
   return memo.partner;
 }
 function compat() {
@@ -55,6 +59,31 @@ function resetMemo(which) {
   if (which === 'partner') delete memo.partner;
   delete memo.compat;
 }
+
+// 지금 보는 사람을 바꾼다 (다른 사람이면 상담 기록은 새로 시작)
+function setMe(person) {
+  if (!analyzeCached(person)) return false;
+  const prev = state.me;
+  const changed = !prev || personKey(prev) !== personKey(person);
+  state.me = person;
+  resetMemo('me');
+  if (changed) { state.chat = []; store.del('chat'); }
+  store.set('me', state.me);
+  return true;
+}
+
+const presetMemo = new Map();
+function analyzeCached(person) {
+  const k = personKey(person);
+  if (!presetMemo.has(k)) {
+    let a = null;
+    try { a = analyzePerson(person); } catch { a = null; }
+    presetMemo.set(k, a);
+  }
+  return presetMemo.get(k);
+}
+
+function savePresets() { store.set('presets', state.presets); }
 
 const counselor = createCounselor(() => ({ a: me(), fc: forecast(), compat: compat() }));
 
@@ -142,6 +171,7 @@ function talisman(kind, person) {
     ? `<h2>연애 사주 신청서</h2><p>적어 준 기운으로 묘연이 인연의 실을 읽어요</p>`
     : `<h2>궁합 신청서</h2><p>궁금한 그 사람의 정보를 적어 주세요</p>${meA ? `<span class="talisman__me">나: ${esc(meA.name)} · ${STEMS[meA.dm]}${BRANCHES[meA.dayBranch]} 일주</span>` : ''}`;
   return `<form class="talisman" data-form="${kind}" novalidate>
+    ${v.name ? `<div class="talisman__top"><button class="mini" type="button" data-action="form-clear">✏️ 새로 쓰기</button></div>` : ''}
     <div class="talisman__head">${head}</div>
     <div class="field">
       <label for="${id('name')}">${isMe ? '이름' : '상대 이름'}</label>
@@ -190,6 +220,9 @@ function talisman(kind, person) {
         <span class="seal__glyph" aria-hidden="true">緣</span>
         <span class="seal__label">${isMe ? '도장 찍고 사주 펼치기' : '도장 찍고 궁합 보기'}</span>
       </button>
+    </div>
+    <div class="talisman__tools">
+      <button class="mini" type="button" data-action="preset-save-form">📌 프리셋에 저장만 하기</button>
     </div>
     <span class="imprint" aria-hidden="true">緣</span>
   </form>`;
@@ -255,15 +288,128 @@ function viewHome() {
   let html = cover();
   html += talk('myo', 'smile', p('어서 와라냥. 여기는 인연(緣)을 읽어 주는 <strong>묘연 사주방</strong>이야.') + p('연애운, 궁합, 고민 상담까지 전부 웹툰으로 쉽게 풀어 줄게.'), { scene: 'night', sfx: '딸랑♪', caption: '골목 끝, 방울 소리가 나는 작은 점집' });
   if (a) {
-    html += talk('coco', 'sparkle', p(`앗, <strong>${esc(a.name)}님</strong> 다시 왔네요! 저장해 둔 사주로 바로 볼까요?`), { side: 'right', scene: 'mint' });
+    html += talk('coco', 'sparkle', p(`앗, <strong>${esc(a.name)}님</strong> 다시 왔네요! 지난번에 본 사주로 바로 볼까요?`), { side: 'right', scene: 'mint' });
     html += todayCard(a);
     html += `<div class="actions"><a class="btn btn--pink" href="#reading">${esc(a.name)}님 사주 다시 보기</a><a class="btn btn--lilac" href="#chat">상담실 가기</a></div>`;
-    html += talk('coco', 'wink', p('다른 사람으로 새로 보고 싶으면 아래 부적을 고쳐 써요!'), { side: 'right', scene: 'pink' });
+  }
+  // "처음으로" 버튼이 오는 자리: 프리셋 + 신청서
+  html += `<div id="start" class="start">${episode('처음으로', '누구의 사주를 펼칠까?')}</div>`;
+  html += presetBook();
+  if (state.presets.length) {
+    html += talk('coco', 'happy', p('위 <strong>프리셋</strong>에서 이름을 누르면 그 사람 사주가 바로 펼쳐져요!') + p('새로운 사람은 부적에 적고 <strong>📌 저장</strong>해 두면 다음엔 한 번에 꺼내 볼 수 있어요.'), { side: 'right', scene: 'pink' });
+  } else if (a) {
+    html += talk('coco', 'wink', p('다른 사람 사주가 궁금하면 <strong>✏️ 새로 쓰기</strong>를 누르고 적어요!') + p('<strong>📌 프리셋에 저장</strong>해 두면 다음엔 한 번에 꺼내 볼 수 있어요.'), { side: 'right', scene: 'pink' });
   } else {
     html += talk('coco', 'happy', p('이름, 생년월일, 태어난 시간을 이 <strong>부적</strong>에 적어 주세요!') + p('음력 생일도 괜찮고, 시간을 몰라도 볼 수 있어요.'), { side: 'right', scene: 'pink', sfx: '쓱쓱' });
   }
   html += talisman('me', state.me);
   return html;
+}
+
+/* ───────────── 프리셋 ───────────── */
+
+const presetEmoji = (person) => { const x = analyzeCached(person); return x ? x.profile.emoji : '🐾'; };
+
+// 홈의 프리셋 목록 (누르면 바로 그 사람 사주로)
+function presetBook() {
+  const list = state.presets;
+  const cur = state.me ? personKey(state.me) : '';
+  const rows = list.map((x) => {
+    const pp = x.person;
+    const xa = analyzeCached(pp);
+    const isCur = personKey(pp) === cur;
+    const name = esc(pp.name);
+    return `<li class="preset ${isCur ? 'is-current' : ''}">
+      <button class="preset__open" type="button" data-preset-open="${esc(x.id)}" aria-label="${name}님 사주 바로 보기">
+        <span class="preset__emoji" aria-hidden="true">${xa ? xa.profile.emoji : '🐾'}</span>
+        <span class="preset__body">
+          <span class="preset__name">${name}<small>${pp.gender === 'F' ? '여' : '남'}</small>${isCur ? '<span class="tag tag--now">보는 중</span>' : ''}</span>
+          <span class="preset__meta">${shortBirth(pp)}${xa ? ` · ${xa.profile.cat}` : ''}</span>
+        </span>
+        <span class="preset__go" aria-hidden="true">›</span>
+      </button>
+      <button class="preset__del" type="button" data-preset-del="${esc(x.id)}" aria-label="${name} 프리셋 지우기">×</button>
+    </li>`;
+  }).join('');
+  const body = list.length
+    ? `<ul class="presets">${rows}</ul>`
+    : '<p class="note">아직 저장한 사람이 없어요. 부적을 쓰고 <b>📌 프리셋에 저장</b>을 누르면 여기 모여요. 가족·친구·썸 상대까지 저장해 두고 바로 꺼내 보세요!</p>';
+  return `<div data-presets="book">${info(`<h3>📒 내 프리셋 <small class="h-sub">${list.length} / ${PRESET_LIMIT}명</small></h3>${body}`, 'paper', 'presetbook')}</div>`;
+}
+
+// 사주 화면 맨 위: 지금 보는 사람 + 저장 + 처음으로 + 다른 프리셋으로 바로 전환
+function viewingBar(a) {
+  const cur = personKey(state.me);
+  const saved = findPreset(state.presets, state.me);
+  const others = state.presets.filter((x) => personKey(x.person) !== cur);
+  return `<div data-presets="viewing"><div class="viewing">
+    <div class="viewing__row">
+      <span class="viewing__who">📖 <b>${esc(a.name)}</b>님의 사주</span>
+      <span class="viewing__btns">
+        ${saved ? '<span class="mini mini--done">✓ 프리셋 저장됨</span>' : '<button class="mini mini--pink" type="button" data-action="preset-save-current">📌 프리셋 저장</button>'}
+        <a class="mini" href="#start">🏠 처음으로</a>
+      </span>
+    </div>
+    ${others.length ? `<div class="viewing__switch" role="group" aria-label="다른 프리셋 사주 보기"><span>다른 사람:</span>${others.map((x) => `<button class="mini" type="button" data-preset-open="${esc(x.id)}">${presetEmoji(x.person)} ${esc(x.person.name)}</button>`).join('')}</div>` : ''}
+  </div></div>`;
+}
+
+// 궁합 화면: 프리셋에서 상대를 고르면 바로 궁합
+function partnerPresets() {
+  const meKey = personKey(state.me);
+  const cur = state.partner ? personKey(state.partner) : '';
+  const list = state.presets.filter((x) => personKey(x.person) !== meKey);
+  if (!list.length) return '<div data-presets="partner"></div>';
+  return `<div data-presets="partner">${info(`<h3>📒 프리셋에서 상대 고르기</h3><p class="note">이름을 누르면 바로 궁합을 봐요.</p>
+    <div class="pchips">${list.map((x) => `<button class="mini ${personKey(x.person) === cur ? 'mini--pink' : ''}" type="button" data-preset-partner="${esc(x.id)}">${presetEmoji(x.person)} ${esc(x.person.name)}</button>`).join('')}</div>`, 'mint')}</div>`;
+}
+
+function refreshPresets() {
+  document.querySelectorAll('[data-presets]').forEach((el) => {
+    const kind = el.dataset.presets;
+    if (kind === 'book') el.outerHTML = presetBook();
+    else if (kind === 'partner') el.outerHTML = partnerPresets();
+    else if (kind === 'viewing' && me()) el.outerHTML = viewingBar(me());
+  });
+}
+
+function savePreset(person) {
+  const { list, result } = upsertPreset(state.presets, person);
+  if (result === 'full') { toast(`프리셋은 ${PRESET_LIMIT}명까지 저장돼요. 안 보는 사람을 지워 주세요.`); return false; }
+  state.presets = list;
+  savePresets();
+  refreshPresets();
+  toast(result === 'added' ? `📌 ${person.name}님을 프리셋에 저장했어요.` : `📌 ${person.name}님 프리셋을 지금 정보로 고쳤어요.`);
+  return true;
+}
+
+function openPreset(id) {
+  const x = state.presets.find((it) => it.id === id);
+  if (!x) return;
+  if (!setMe({ ...x.person })) { toast('이 프리셋의 날짜를 읽을 수 없어요.'); return; }
+  if (location.hash === '#reading') render();
+  else location.hash = '#reading';
+}
+
+function deletePreset(id) {
+  const { list, removed, index } = removePreset(state.presets, id);
+  if (!removed) return;
+  state.presets = list;
+  savePresets();
+  refreshPresets();
+  toast(`${removed.person.name}님을 프리셋에서 지웠어요.`, {
+    label: '되돌리기',
+    fn: () => { state.presets = restorePreset(state.presets, removed, index); savePresets(); refreshPresets(); },
+  });
+}
+
+// 신청서를 빈 칸으로 다시 그린다 (form.reset()은 미리 채운 값으로 돌아가서 쓰지 않음)
+function clearForm(form) {
+  const kind = form.dataset.form;
+  form.outerHTML = talisman(kind, null);
+  const fresh = document.querySelector(`form[data-form="${kind}"]`);
+  fresh.scrollIntoView({ block: 'start' });
+  fresh.querySelector('[name="name"]').focus({ preventScroll: true });
 }
 
 /* ───────────── 오늘의 연애운 · 대운 ───────────── */
@@ -375,7 +521,7 @@ function viewReading() {
   const couple = a.person.status === 'couple';
   const pr = a.profile;
   const baseYear = fc.current.sajuYear;
-  let h = '';
+  let h = viewingBar(a);
 
   // 1화
   h += episode('1화', '사주팔자 대공개');
@@ -488,7 +634,7 @@ function viewReading() {
   h += talk('coco', 'smug', p('그 사람과의 <strong>궁합</strong>도 궁금하지 않아요?'), { side: 'right', scene: 'mint' });
   h += `<div class="actions"><a class="btn btn--pink" href="#compat">궁합 보러 가기</a><a class="btn btn--lilac" href="#chat">묘연에게 상담하기</a><button class="btn" type="button" data-action="share-reading">결과 공유하기</button></div>`;
   h += talk('myo', 'smile', p(`사주는 지도일 뿐, 길을 고르는 건 ${n}님이야. 언제든 놀러 와라냥.`), { scene: 'night' });
-  h += `<div class="actions"><a class="btn btn--ghost" href="#home" style="color:#fff;border-color:#fff">정보 고쳐서 다시 보기</a></div>`;
+  h += `<div class="actions">${findPreset(state.presets, state.me) ? '' : '<button class="btn btn--pink" type="button" data-action="preset-save-current">📌 프리셋에 저장</button>'}<a class="btn btn--ghost" href="#start" style="color:#fff;border-color:#fff">🏠 처음으로 · 다른 사람 보기</a></div>`;
   return h;
 }
 
@@ -547,6 +693,7 @@ function viewCompat() {
   }
   let h = '';
   h += talk('myo', 'smug', p(`${esc(a.name)}님, 궁합을 볼 상대가 있다고? 그 사람 정보를 부적에 적어 줘냥.`) + p('상대의 태어난 시간을 몰라도 괜찮아.'), { scene: 'lilac' });
+  h += partnerPresets();
   h += talisman('partner', state.partner);
   const c = compat();
   if (c) h += `<div id="compat-result">${compatResultHtml(c)}</div>`;
@@ -714,6 +861,7 @@ const app = document.getElementById('app');
 
 function render() {
   const route = (location.hash || '#home').slice(1);
+  const tab = route === 'home' || route === 'start' ? 'start' : route;
   let html;
   if (route === 'reading') html = viewReading();
   else if (route === 'compat') html = viewCompat();
@@ -721,14 +869,16 @@ function render() {
   if (html == null) html = viewHome();
   app.innerHTML = html;
   document.querySelectorAll('.tabs a').forEach((t) => {
-    if (t.dataset.tab === route) t.setAttribute('aria-current', 'page');
+    if (t.dataset.tab === tab) t.setAttribute('aria-current', 'page');
     else t.removeAttribute('aria-current');
   });
   document.title = {
     reading: '내 연애 사주 — 묘연의 연애사주', compat: '궁합 — 묘연의 연애사주', chat: '상담실 — 묘연의 연애사주',
   }[route] || '묘연의 연애사주 — 고양이 점술사가 웹툰으로 풀어 주는 연애 사주·궁합';
   if (route === 'chat') scrollChat();
-  if (route === 'compat' && pendingScroll === 'compat-result') {
+  if (route === 'start') {
+    document.getElementById('start')?.scrollIntoView({ block: 'start' });
+  } else if (route === 'compat' && pendingScroll === 'compat-result') {
     document.getElementById('compat-result')?.scrollIntoView({ block: 'start' });
     animateScore();
   } else {
@@ -783,13 +933,9 @@ app.addEventListener('submit', (ev) => {
   const res = readForm(form);
   if (res.error) { showError(form, res); return; }
   if (kind === 'me') {
-    const prev = state.me;
-    state.me = res.person;
-    resetMemo('me');
-    if (!analyzePerson(state.me)) { state.me = prev; showError(form, { error: '날짜를 확인해 주세요.', focus: 'day' }); return; }
-    const changedPerson = !prev || ['name', 'year', 'month', 'day', 'hour', 'minute', 'gender', 'calendar', 'leap'].some((k) => prev[k] !== state.me[k]);
-    if (changedPerson) { state.chat = []; store.del('chat'); }
-    store.set('me', state.me);
+    if (!setMe(res.person)) { showError(form, { error: '날짜를 확인해 주세요.', focus: 'day' }); return; }
+    // 프리셋에 있는 사람이면 연애 상태 등 바뀐 내용을 프리셋에도 반영
+    if (findPreset(state.presets, state.me)) { state.presets = upsertPreset(state.presets, state.me).list; savePresets(); }
     stampThen(form, () => { location.hash = '#reading'; if (location.hash === '#reading') render(); });
   } else if (kind === 'partner') {
     state.partner = res.person;
@@ -837,8 +983,32 @@ app.addEventListener('change', (ev) => {
 app.addEventListener('click', (ev) => {
   const chip = ev.target.closest('[data-chip]');
   if (chip) { ask(chip.dataset.chip); return; }
+  const open = ev.target.closest('[data-preset-open]');
+  if (open) { openPreset(open.dataset.presetOpen); return; }
+  const del = ev.target.closest('[data-preset-del]');
+  if (del) { deletePreset(del.dataset.presetDel); return; }
+  const pick = ev.target.closest('[data-preset-partner]');
+  if (pick) {
+    const x = state.presets.find((it) => it.id === pick.dataset.presetPartner);
+    if (!x || !analyzeCached(x.person)) return;
+    state.partner = { ...x.person };
+    resetMemo('partner');
+    store.set('partner', state.partner);
+    pendingScroll = 'compat-result';
+    render();
+    return;
+  }
   const act = ev.target.closest('[data-action]');
   if (!act) return;
+  if (act.dataset.action === 'preset-save-current' && state.me) savePreset(state.me);
+  if (act.dataset.action === 'preset-save-form') {
+    const form = act.closest('form');
+    const res = readForm(form);
+    if (res.error) { showError(form, res); return; }
+    if (!analyzeCached(res.person)) { showError(form, { error: '날짜를 확인해 주세요.', focus: 'day' }); return; }
+    savePreset(res.person);
+  }
+  if (act.dataset.action === 'form-clear') clearForm(act.closest('form'));
   if (act.dataset.action === 'clear-chat') {
     state.chat = [];
     store.del('chat');
@@ -846,17 +1016,14 @@ app.addEventListener('click', (ev) => {
   }
   if (act.dataset.action === 'share-reading') shareReading();
   if (act.dataset.action === 'share-compat') shareCompat();
-  if (act.dataset.action === 'new-partner') {
-    const form = document.querySelector('form[data-form="partner"]');
-    form.reset();
-    form.querySelectorAll('input[type=radio]').forEach((r) => { r.checked = r.value === 'solar'; });
-    form.querySelector('[name="time"]').disabled = false;
-    form.querySelector('[data-leap]').hidden = true;
-    form.querySelector('.form-error').textContent = '';
-    form.querySelector('[data-time-hint]').innerHTML = timeHint('');
-    form.scrollIntoView({ block: 'start' });
-    form.querySelector('[name="name"]').focus();
-  }
+  if (act.dataset.action === 'new-partner') clearForm(document.querySelector('form[data-form="partner"]'));
+});
+
+// 이미 그 주소에 있을 때 같은 링크(예: 처음으로)를 다시 누르면 그 자리로 다시 이동
+document.addEventListener('click', (ev) => {
+  const a = ev.target.closest('a[href^="#"]');
+  if (!a || ev.defaultPrevented || a.classList.contains('skip')) return;
+  if (a.getAttribute('href') === location.hash) { ev.preventDefault(); render(); }
 });
 
 app.addEventListener('keydown', (ev) => {
@@ -887,16 +1054,23 @@ if (window.claude && typeof window.claude.use === 'function') {
 
 const inFrame = (() => { try { return window.top !== window; } catch { return true; } })();
 
-function toast(msg) {
+function toast(msg, action) {
   let el = document.getElementById('toast');
   if (!el) {
     document.body.insertAdjacentHTML('beforeend', '<div class="toast" id="toast" role="status" aria-live="polite"></div>');
     el = document.getElementById('toast');
   }
-  el.textContent = msg;
+  el.innerHTML = `<span>${esc(msg)}</span>${action ? `<button class="mini" type="button">${esc(action.label)}</button>` : ''}`;
+  el.classList.toggle('has-action', !!action);
+  if (action) {
+    el.querySelector('button').addEventListener('click', () => {
+      action.fn();
+      el.classList.remove('is-on', 'has-action');
+    }, { once: true });
+  }
   el.classList.add('is-on');
   clearTimeout(toast.t);
-  toast.t = setTimeout(() => el.classList.remove('is-on'), 2600);
+  toast.t = setTimeout(() => el.classList.remove('is-on', 'has-action'), action ? 5000 : 2600);
 }
 
 async function share(text) {
