@@ -1,6 +1,6 @@
 import { drawCharacter, faceAvatar } from './characters.js';
 import {
-  analyzePerson, buildForecast, formatBirth, summaryForAI,
+  analyzePerson, buildForecast, formatBirth, summaryForAI, computeDaewoon, dailyLove,
   ELEMENT_INFO, CHARMS, DAY_MASTERS, LUCK, STATUS_LABEL,
   ELEMENTS, ELEMENT_KO, ELEMENT_HANJA, STEMS, STEMS_KO, BRANCHES, BRANCHES_KO,
 } from './reading.js';
@@ -8,6 +8,7 @@ import { analyzeCompat } from './compat.js';
 import { createCounselor, starterChips } from './counsel.js';
 import { lunarToSolar, lunarMonthInfo } from './lunar.js';
 import { escapeHtml as esc, renderRich, josa, hasBatchim } from './text.js';
+import { SYSTEM_PROMPT, contextBlock, todayKST } from './persona.js';
 
 /* ───────────── 상태 ───────────── */
 
@@ -22,7 +23,8 @@ const state = {
   me: store.get('me'),
   partner: store.get('partner'),
   chat: store.get('chat') || [],
-  ai: false,
+  ai: null, // null | 'server'(Node + API 키) | 'artifact'(Claude 아티팩트의 sample)
+  sample: null,
   busy: false,
 };
 const memo = {};
@@ -199,6 +201,7 @@ function viewHome() {
   html += talk('myo', 'smile', p('어서 와라냥. 여기는 인연(緣)을 읽어 주는 <strong>묘연 사주방</strong>이야.') + p('연애운, 궁합, 고민 상담까지 전부 웹툰으로 쉽게 풀어 줄게.'), { scene: 'night', sfx: '딸랑♪', caption: '골목 끝, 방울 소리가 나는 작은 점집' });
   if (a) {
     html += talk('coco', 'sparkle', p(`앗, <strong>${esc(a.name)}님</strong> 다시 왔네요! 저장해 둔 사주로 바로 볼까요?`), { side: 'right', scene: 'mint' });
+    html += todayCard(a);
     html += `<div class="actions"><a class="btn btn--pink" href="#reading">${esc(a.name)}님 사주 다시 보기</a><a class="btn btn--lilac" href="#chat">상담실 가기</a></div>`;
     html += talk('coco', 'wink', p('다른 사람으로 새로 보고 싶으면 아래 부적을 고쳐 써요!'), { side: 'right', scene: 'pink' });
   } else {
@@ -206,6 +209,37 @@ function viewHome() {
   }
   html += talisman('me', state.me);
   return html;
+}
+
+/* ───────────── 오늘의 연애운 · 대운 ───────────── */
+
+function todayCard(a) {
+  const t = dailyLove(a);
+  const couple = a.person.status === 'couple';
+  return info(`<h3>🗓️ 오늘의 연애운 <small class="h-sub">${t.m}월 ${t.day}일(${t.weekday}) · ${t.pillar.hanja}일</small></h3>
+    <div class="today">
+      <div class="today__score" aria-label="${t.score}점">${t.score}<small>점</small></div>
+      <div>
+        <p class="today__label">${t.reason.emoji} ${t.reason.label}</p>
+        <p>${couple ? t.reason.couple : t.reason.solo}</p>
+        <p class="note">💡 ${t.reason.tip}</p>
+      </div>
+    </div>`, 'mint');
+}
+
+function daewoonList(dw) {
+  return `<ol class="dw">${dw.periods.map((d) => {
+    const past = d.to < dw.ageNow && !d.isNow;
+    return `<li class="dw__item ${d.isNow ? 'is-now' : ''} ${d.isGolden ? 'is-golden' : ''} ${past ? 'is-past' : ''}">
+      <div class="dw__age">만 ${d.from}~${d.to}세<small>${d.startYear}년~</small></div>
+      <div class="dw__gz hanja">${d.pillar.hanja}</div>
+      <div class="dw__body">
+        <div class="meter"><span style="width:${d.score}%"></span></div>
+        <div class="year__line"><span>${d.reason.emoji} ${d.reason.label}</span><b>${d.score}점</b></div>
+        ${d.isNow ? '<span class="tag tag--now">지금 여기</span>' : ''}${d.isGolden ? '<span class="tag tag--gold">연애 황금기</span>' : ''}
+      </div>
+    </li>`;
+  }).join('')}</ol>`;
 }
 
 /* ───────────── 화면: 내 사주 웹툰 ───────────── */
@@ -363,12 +397,18 @@ function viewReading() {
   // 7화
   h += episode('7화', '연애운 달력');
   h += talk('myo', 'smug', p(`이제 제일 궁금한 거! ${couple ? '관계가 깊어지는' : '인연이 들어오는'} 때를 볼까냥?`), { scene: 'night', sfx: '두근두근', sfxPos: 'sfx--tr sfx--pink' });
+  h += todayCard(a);
   h += info(`<h3>앞으로 5년 연애운</h3>${yearsList(fc, couple)}`);
   h += info(`<h3>앞으로 12개월 연애운</h3>${monthChart(fc)}`);
   const b0 = fc.best[0];
   h += talk('coco', 'sparkle', p(`<strong>${monthLabel(b0, baseYear)}</strong>은 달력에 꼭 동그라미! (${b0.reason.emoji} ${b0.reason.label})`) + p(couple ? b0.reason.couple : b0.reason.solo), { side: 'right', scene: 'pink', sfx: '체크!' });
   const w = fc.worst;
   h += talk('myo', 'think', p(`<strong>${monthLabel(w, baseYear)}</strong>엔 ${w.reason.label} 기운이 있으니 살짝 쉬어 가자냥.`) + p(`💡 ${w.reason.tip}`), { scene: 'lilac' });
+  const dw = computeDaewoon(a);
+  h += talk('coco', 'think', p('더 길게 보면요? 몇 살 때 연애운이 제일 좋아요?'), { side: 'right', scene: 'mint' });
+  h += talk('myo', 'smug', p('사주엔 <strong>10년마다 바뀌는 큰 흐름</strong>, 대운(大運)이 있다냥.') + p(dw.golden ? `${n}님의 연애 황금기는 <strong>만 ${dw.golden.from}~${dw.golden.to}세</strong>(${dw.golden.startYear}년~)야. ${dw.golden.reason.emoji} ${dw.golden.reason.label}!` : '앞으로의 흐름을 표로 보여 줄게.'), { scene: 'night' });
+  h += info(`<h3>인생 연애 타임라인</h3>${daewoonList(dw)}
+    <p class="note" style="margin-top:10px">대운은 ${dw.forward ? '순행' : '역행'}, 만 ${dw.startAge}세부터 10년씩 바뀌어요. 큰 흐름이라 그해·그달의 운과 함께 봐요.</p>`);
 
   // 8화
   h += episode('8화', '해결책 & 개운법');
@@ -391,7 +431,7 @@ function viewReading() {
   // 에필로그
   h += episode('에필로그', '이야기는 계속된다');
   h += talk('coco', 'smug', p('그 사람과의 <strong>궁합</strong>도 궁금하지 않아요?'), { side: 'right', scene: 'mint' });
-  h += `<div class="actions"><a class="btn btn--pink" href="#compat">궁합 보러 가기</a><a class="btn btn--lilac" href="#chat">묘연에게 상담하기</a></div>`;
+  h += `<div class="actions"><a class="btn btn--pink" href="#compat">궁합 보러 가기</a><a class="btn btn--lilac" href="#chat">묘연에게 상담하기</a><button class="btn" type="button" data-action="share-reading">결과 공유하기</button></div>`;
   h += talk('myo', 'smile', p(`사주는 지도일 뿐, 길을 고르는 건 ${n}님이야. 언제든 놀러 와라냥.`), { scene: 'night' });
   h += `<div class="actions"><a class="btn btn--ghost" href="#home" style="color:#fff;border-color:#fff">정보 고쳐서 다시 보기</a></div>`;
   return h;
@@ -440,7 +480,7 @@ function compatResultHtml(c) {
       <span class="rx__stamp" aria-hidden="true">緣</span>
     </div></section>`;
   h += talk('myo', 'smile', p('궁합은 정해진 답이 아니라 서로를 이해하는 힌트야. 더 궁금한 건 상담실로 와라냥.'), { scene: 'night' });
-  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 궁합으로 상담하기</a><button class="btn btn--lilac" type="button" data-action="new-partner">다른 사람과 궁합 보기</button></div>`;
+  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 궁합으로 상담하기</a><button class="btn btn--lilac" type="button" data-action="new-partner">다른 사람과 궁합 보기</button><button class="btn" type="button" data-action="share-compat">궁합 공유하기</button></div>`;
   return h;
 }
 
@@ -480,7 +520,7 @@ function viewChat() {
     store.set('chat', state.chat);
   }
   const c = compat();
-  const mode = state.ai ? 'AI 상담 모드' : '사주 맞춤 상담 모드';
+  const mode = state.ai ? 'Claude AI 상담 모드' : '사주 맞춤 상담 모드';
   return `<section class="chat" aria-label="묘연 상담실">
     <div class="chat__head">
       <div class="avatar">${faceAvatar('myo', 'smile')}</div>
@@ -519,6 +559,7 @@ async function ask(question) {
 
   let reply = null;
   if (state.ai) reply = await askAI();
+  if (!state.ai) refreshChatHeader();
   if (!reply) {
     await new Promise((r) => setTimeout(r, 650));
     const r = counselor.respond(q);
@@ -536,42 +577,73 @@ async function ask(question) {
   state.busy = false;
 }
 
-// 서버(Claude) 상담 — 실패하면 null 을 돌려 규칙형 상담으로 대체
-async function askAI() {
-  const a = me();
+// Claude 상담 — 서버(/api/chat) 또는 Claude 아티팩트의 sample. 실패하면 null → 규칙형 상담으로 대체
+function chatHistory() {
   const history = state.chat.filter((m) => m.role === 'user' || m.role === 'assistant').slice(-16)
     .map((m) => ({ role: m.role, content: m.content.slice(0, 2000) }));
   while (history.length && history[0].role !== 'user') history.shift();
+  return history;
+}
+
+function showLive(text) {
+  document.getElementById('typing')?.remove();
+  const log = document.getElementById('chat-log');
+  let live = document.getElementById('ai-live');
+  if (!live) {
+    log.insertAdjacentHTML('beforeend', `<div class="msg msg--bot" id="ai-live"><div class="avatar">${faceAvatar('myo', 'smile')}</div><div class="msg__bubble"></div></div>`);
+    live = document.getElementById('ai-live');
+  }
+  live.querySelector('.msg__bubble').innerHTML = renderRich(text);
+  scrollChat();
+}
+
+async function askAI() {
+  const context = summaryForAI(me(), forecast(), compat());
+  const history = chatHistory();
+  const text = state.ai === 'artifact' ? await askArtifact(history, context) : await askServer(history, context);
+  if (!text || !text.trim()) return null;
+  return { role: 'assistant', content: text.trim(), expr: guessExpr(text), source: 'ai' };
+}
+
+async function askServer(history, context) {
   try {
     const res = await fetch('api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: history, context: summaryForAI(a, forecast(), compat()) }),
+      body: JSON.stringify({ messages: history, context }),
     });
     if (!res.ok || !res.body) return null;
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let text = '';
-    const log = document.getElementById('chat-log');
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       text += dec.decode(value, { stream: true });
-      document.getElementById('typing')?.remove();
-      let live = document.getElementById('ai-live');
-      if (!live) {
-        log.insertAdjacentHTML('beforeend', `<div class="msg msg--bot" id="ai-live"><div class="avatar">${faceAvatar('myo', 'smile')}</div><div class="msg__bubble"></div></div>`);
-        live = document.getElementById('ai-live');
-      }
-      live.querySelector('.msg__bubble').innerHTML = renderRich(text);
-      scrollChat();
+      showLive(text);
     }
-    text = text.trim();
-    if (!text) return null;
-    return { role: 'assistant', content: text, expr: guessExpr(text), source: 'ai' };
+    return text;
   } catch {
     return null;
   }
+}
+
+// Claude 아티팩트로 열었을 때: 보는 사람의 Claude 계정으로 답한다 (첫 질문에 동의 요청)
+async function askArtifact(history, context) {
+  const intro = `${SYSTEM_PROMPT}\n\n${contextBlock(context, todayKST())}\n\n---\n아래는 상담자와의 대화야. 묘연으로서 마지막 질문에 답해 줘. 답변 본문만 써.\n\n`;
+  const input = history.map((m, i) => (i === 0 ? { role: 'user', content: intro + m.content } : m));
+  try {
+    const res = await state.sample(input, { cache: false, onText: ({ text }) => { if (text) showLive(text); } });
+    return res.text;
+  } catch (err) {
+    if (err && err.code === 'not_granted') state.ai = null; // 권한이 없으면 이후엔 규칙형 상담만
+    return null;
+  }
+}
+
+function refreshChatHeader() {
+  const small = document.querySelector('.chat__title small');
+  if (small) small.innerHTML = small.innerHTML.replace('Claude AI 상담 모드', '사주 맞춤 상담 모드');
 }
 
 function guessExpr(t) {
@@ -697,11 +769,15 @@ app.addEventListener('click', (ev) => {
     store.del('chat');
     render();
   }
+  if (act.dataset.action === 'share-reading') shareReading();
+  if (act.dataset.action === 'share-compat') shareCompat();
   if (act.dataset.action === 'new-partner') {
     const form = document.querySelector('form[data-form="partner"]');
     form.reset();
     form.querySelectorAll('input[type=radio]').forEach((r) => { r.checked = r.value === 'solar'; });
     form.querySelector('[name="time"]').disabled = false;
+    form.querySelector('[data-leap]').hidden = true;
+    form.querySelector('.form-error').textContent = '';
     form.scrollIntoView({ block: 'start' });
     form.querySelector('[name="name"]').focus();
   }
@@ -716,9 +792,61 @@ app.addEventListener('keydown', (ev) => {
 
 window.addEventListener('hashchange', render);
 
-// AI 상담 서버가 있으면 사용
-fetch('api/health').then((r) => (r.ok ? r.json() : null)).then((j) => {
-  if (j && j.ai) { state.ai = true; if (location.hash === '#chat') render(); }
-}).catch(() => {});
+// AI 상담: Claude 아티팩트로 열렸으면 sample, 아니면 Node 서버(/api/chat)가 있는지 확인
+function enableAI(mode) {
+  state.ai = mode;
+  if (location.hash === '#chat' && !state.busy) render();
+}
+if (window.claude && typeof window.claude.use === 'function') {
+  window.claude.use('sample').then((sample) => {
+    if (sample) { state.sample = sample; enableAI('artifact'); }
+  }).catch(() => {});
+} else {
+  fetch('api/health').then((r) => (r.ok ? r.json() : null)).then((j) => {
+    if (j && j.ai) enableAI('server');
+  }).catch(() => {});
+}
+
+/* ───────────── 공유 ───────────── */
+
+const inFrame = (() => { try { return window.top !== window; } catch { return true; } })();
+
+function toast(msg) {
+  let el = document.getElementById('toast');
+  if (!el) {
+    document.body.insertAdjacentHTML('beforeend', '<div class="toast" id="toast" role="status" aria-live="polite"></div>');
+    el = document.getElementById('toast');
+  }
+  el.textContent = msg;
+  el.classList.add('is-on');
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => el.classList.remove('is-on'), 2600);
+}
+
+async function share(text) {
+  const url = inFrame ? '' : location.href.split('#')[0];
+  if (!inFrame && navigator.share) {
+    try { await navigator.share({ title: '묘연의 연애사주', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  try {
+    await navigator.clipboard.writeText(url ? `${text}\n${url}` : text);
+    toast('결과를 복사했어요. 친구에게 붙여 넣어 보내 보세요!');
+  } catch {
+    toast('이 화면에선 복사가 막혀 있어요. 캡처해서 공유해 주세요!');
+  }
+}
+
+function shareReading() {
+  const a = me(), fc = forecast();
+  if (!a) return;
+  const y = fc.years[0], b = fc.best[0];
+  share(`🐾 묘연의 연애사주\n${a.name}님의 연애 캐릭터는 "${a.profile.cat}" ${a.profile.emoji}\n${y.year}년 연애운 ${y.score}점 (${y.reason.label}) · 인연운 최고의 달은 ${b.year}년 ${b.month}월!`);
+}
+
+function shareCompat() {
+  const c = compat();
+  if (!c) return;
+  share(`🐾 묘연의 연애사주\n${c.a.name} ♥ ${c.b.name} 궁합 ${c.score}점, ${c.grade.title} ${c.grade.emoji}\n"${c.grade.line}"`);
+}
 
 render();

@@ -61,7 +61,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .topbar {
   position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  max-width: 560px; margin: 0 auto; padding: 10px 14px;
+  max-width: 560px; margin: 0 auto;
+  padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 10px max(14px, env(safe-area-inset-left));
   background: color-mix(in srgb, var(--night) 92%, transparent);
   backdrop-filter: blur(8px);
 }
@@ -442,8 +443,42 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .chat__form textarea { resize: none; min-height: 46px; max-height: 120px; padding: 10px 12px; font-size: 16px; line-height: 1.4; border: 2.5px solid var(--ink); border-radius: 14px; background: #FFF8FB; }
 .chat__form .btn { padding: 10px 16px; }
 
+/* ───────── 오늘의 연애운 · 대운 ───────── */
+.h-sub { display: block; font-family: var(--f-body); font-size: var(--s-1); color: #4D6B60; margin-top: 2px; }
+.today { display: grid; grid-template-columns: 86px 1fr; gap: 14px; align-items: start; }
+.today__score {
+  display: grid; place-items: center; width: 86px; height: 86px; border-radius: 50%;
+  background: var(--paper); border: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink);
+  font-family: var(--f-display); font-size: 34px; line-height: 1;
+}
+.today__score small { display: block; font-family: var(--f-body); font-size: 12px; margin-top: -18px; }
+.today__label { font-family: var(--f-display); font-size: var(--s-4); margin: 0 0 4px !important; }
+
+.dw { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.dw__item { display: grid; grid-template-columns: 82px 46px 1fr; gap: 10px; align-items: center; padding: 8px 8px; border-radius: 12px; }
+.dw__item.is-past { opacity: .5; }
+.dw__item.is-now { background: var(--lilac-soft); outline: 2px dashed var(--lilac); }
+.dw__item.is-golden { background: #FFF0F6; outline: 2px solid var(--blush); }
+.dw__age { font-family: var(--f-display); font-size: var(--s-2); line-height: 1.2; }
+.dw__age small { display: block; font-family: var(--f-body); font-size: 12px; color: #6E5E85; }
+.dw__gz { font-family: var(--f-hanja); font-weight: 900; font-size: 22px; text-align: center; }
+.dw__item.is-golden .meter > span { background: var(--blush); }
+.dw__item:not(.is-golden) .meter > span { background: var(--lilac); }
+.tag { display: inline-block; margin-top: 4px; margin-right: 4px; padding: 0 8px; border: 2px solid var(--ink); border-radius: 999px; font-family: var(--f-display); font-size: 12px; line-height: 1.6; }
+.tag--now { background: var(--lilac); }
+.tag--gold { background: var(--talisman); }
+
+.toast {
+  position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); z-index: 40;
+  transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+  max-width: min(92vw, 420px); padding: 10px 16px; border: 2.5px solid var(--ink); border-radius: 14px;
+  background: var(--talisman); box-shadow: 0 4px 0 var(--ink); font-size: var(--s-2); text-align: center;
+  transition: opacity .2s, transform .2s;
+}
+.toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+
 /* ───────── 기타 ───────── */
-.foot { max-width: 560px; margin: 0 auto; padding: 0 22px 40px; color: #CBBCEB; font-size: var(--s-1); line-height: 1.6; }
+.foot { max-width: 560px; margin: 0 auto; padding: 0 22px max(40px, env(safe-area-inset-bottom)); color: #CBBCEB; font-size: var(--s-1); line-height: 1.6; }
 .foot p { margin: 0 0 6px; }
 .loading { display: grid; place-items: center; min-height: 60vh; color: #fff; font-family: var(--f-display); font-size: var(--s-5); }
 

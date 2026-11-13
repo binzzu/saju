@@ -279,7 +279,7 @@ export function computeSaju(birth) {
   }
 
   const pillars = { year: yearP, month: monthP, day: dayP, hour: hourP };
-  return { birth: { year, month, day, hour: timeKnown ? hour : null, minute: timeKnown ? minute : null }, timeKnown, pillars, sajuYear, monthAmbiguous };
+  return { birth: { year, month, day, hour: timeKnown ? hour : null, minute: timeKnown ? minute : null }, timeKnown, pillars, sajuYear, monthAmbiguous, utcMs, monthIdx };
 }
 
 /* ───────────── 십신 ───────────── */

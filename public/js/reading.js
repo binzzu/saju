@@ -5,6 +5,7 @@ import {
   elementThatGenerates, elementGeneratedBy, elementThatControls, elementControlledBy,
   branchRelation, stemsCombine, peachBlossomBranch, RED_FLAME, trineGroup,
   yearMonthPillarsAt, yearPillarOf, seoulWallToUtc, mod,
+  ganzhi, solarLongitude, findSolarTermTime, dayPillarOf,
 } from './saju.js';
 import { lunarToSolar, solarToLunar } from './lunar.js';
 
@@ -443,6 +444,54 @@ export function buildForecast(a, nowMs = Date.now()) {
   return { years, months, best, worst, current: cur };
 }
 
+/* ───────────── 대운: 10년 단위 인생 연애 흐름 ───────────── */
+
+const DAY_MS = 86400000;
+
+// 대운 방향: 양년생 남자·음년생 여자는 순행, 나머지는 역행
+// 대운수: 출생부터 다음(순행)·이전(역행) 절입까지의 날 수 ÷ 3
+export function computeDaewoon(a, nowMs = Date.now(), count = 8) {
+  const { saju } = a;
+  const yearYang = saju.pillars.year.stem % 2 === 0;
+  const forward = (yearYang && a.gender === 'M') || (!yearYang && a.gender === 'F');
+  const birth = saju.utcMs;
+  const lam = solarLongitude(birth);
+  const boundary = mod(315 + 30 * (saju.monthIdx + (forward ? 1 : 0)), 360);
+  const span = forward ? mod(boundary - lam, 360) : -mod(lam - boundary, 360);
+  const term = findSolarTermTime(boundary, birth + (span / 360) * 365.2422 * DAY_MS);
+  const days = Math.abs(term - birth) / DAY_MS;
+  const startAge = Math.max(1, Math.round(days / 3));
+  const ageNow = (nowMs - birth) / (365.2425 * DAY_MS);
+  const monthIndex60 = saju.pillars.month.index;
+  const periods = [];
+  for (let k = 0; k < count; k++) {
+    const p = ganzhi(monthIndex60 + (forward ? k + 1 : -(k + 1)));
+    const from = startAge + 10 * k;
+    const love = periodLove(a, p.stem, p.branch);
+    periods.push({
+      from, to: from + 9, startYear: a.solar.year + from,
+      isNow: ageNow >= from && ageNow < from + 10,
+      ...love,
+    });
+  }
+  const upcoming = periods.filter((x) => x.from + 9 >= ageNow);
+  const prime = upcoming.filter((x) => x.from < 60);
+  const golden = [...(prime.length ? prime : upcoming)].sort((x, y) => y.score - x.score)[0];
+  if (golden) golden.isGolden = true;
+  return { forward, startAge, days, periods, ageNow, golden, current: periods.find((x) => x.isNow) || null };
+}
+
+/* ───────────── 오늘의 연애운 ───────────── */
+
+export function dailyLove(a, nowMs = Date.now()) {
+  const d = new Date(nowMs + 9 * 3600000);
+  const y = d.getUTCFullYear(), m = d.getUTCMonth() + 1, day = d.getUTCDate();
+  const p = dayPillarOf(y, m, day);
+  const love = periodLove(a, p.stem, p.branch);
+  const WD = ['일', '월', '화', '수', '목', '금', '토'];
+  return { y, m, day, weekday: WD[d.getUTCDay()], ...love };
+}
+
 /* ───────────── 요약 (상담·AI용) ───────────── */
 
 export function hanjaPillars(a) {
@@ -473,6 +522,10 @@ export function summaryForAI(a, fc, compat) {
     lines.push(`연도별 연애운: ${fc.years.map((y) => `${y.year}년(${y.pillar.hanja}) ${y.score}점 ${y.reason.label}`).join(' / ')}`);
     lines.push(`앞으로 12개월 연애운: ${fc.months.map((m) => `${m.year}.${m.month} ${m.score}점(${m.reason.label})`).join(', ')}`);
   }
+  const dw = computeDaewoon(a);
+  lines.push(`10년 대운(${dw.forward ? '순행' : '역행'}, 대운수 ${dw.startAge}): ${dw.periods.map((d) => `만${d.from}~${d.to}세(${d.startYear}~) ${d.pillar.hanja} ${d.score}점 ${d.reason.label}${d.isNow ? ' ←현재' : ''}`).join(' / ')}`);
+  const today = dailyLove(a);
+  lines.push(`오늘(${today.y}-${today.m}-${today.day}, ${today.pillar.hanja}일) 연애운: ${today.score}점 ${today.reason.label}`);
   if (compat) {
     lines.push(`궁합 상대: ${compat.b.name} (${compat.b.gender === 'F' ? '여성' : '남성'}), 일간 ${STEMS[compat.b.dm]} ${ELEMENT_KO[compat.b.dmEl]}, 사주 ${hanjaPillars(compat.b)}`);
     lines.push(`궁합 점수: ${compat.score}점 (${compat.grade.title}) — ${compat.parts.map((p) => `${p.label} ${p.points}/${p.max}: ${p.short}`).join(' / ')}`);

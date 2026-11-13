@@ -1,0 +1,15 @@
+# Render(render.com) 블루프린트: New → Blueprint 에서 이 저장소를 고르면 서버가 만들어져요.
+# ANTHROPIC_API_KEY 는 Render 대시보드에서 직접 입력하세요 (저장소에 넣지 마세요).
+services:
+  - type: web
+    name: myoyeon-saju
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CLAUDE_EFFORT
+        value: low
