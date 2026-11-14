@@ -11,6 +11,7 @@ import { analyzeBreakup, periodRisk, summaryBreakupForAI } from '../public/js/br
 import { analyzeReunion, periodReunion, summaryReunionForAI } from '../public/js/reunion.js';
 import { analyzeIntimacy, ageOf, summaryIntimacyForAI } from '../public/js/intimacy.js';
 import { dailyFortune, weekFortune, summaryDailyForAI } from '../public/js/daily.js';
+import { suggestQuestions, lastTopicOf, MORE } from '../public/js/suggest.js';
 import { createCounselor, detectTopic } from '../public/js/counsel.js';
 import { josa, renderRich } from '../public/js/text.js';
 import {
@@ -326,4 +327,58 @@ test('오늘의 운세: 그날 일진으로 총운·분야별 운세·시간대�
   assert.equal(w[0].overall, f.overall);
   assert.match(summaryDailyForAI(f), /총운/);
   assert.equal(detectTopic('오늘 운세 어때?'), 'today');
+});
+
+test('추천 질문: 시작·주제별 흐름·이미 물은 질문 제외·관련 화면 링크', () => {
+  // 대화 시작: 상태별 첫 질문
+  const start = suggestQuestions({ status: 'some', asked: [], topic: null });
+  assert.equal(start.chips.length, 4);
+  assert.ok(start.chips.includes('고백하기 좋은 날은?'));
+  assert.equal(start.link, null);
+  // 고백 이야기 뒤: 더 깊은 질문 + 해결책 더 보기 + 링크, 이미 물은 건 빼기
+  const asked = ['고백하기 좋은 날은?'];
+  const s1 = suggestQuestions({ status: 'some', asked, topic: lastTopicOf(asked) });
+  assert.equal(lastTopicOf(asked), 'confession');
+  assert.ok(!s1.chips.includes('고백하기 좋은 날은?'));
+  assert.ok(s1.chips.includes('고백 멘트 추천해 줘'));
+  assert.ok(s1.chips.includes(MORE));
+  assert.equal(s1.link.href, '#reading');
+  // "해결책 더" 바로 뒤에는 같은 칩을 다시 내지 않고, 주제는 앞 질문을 따른다
+  const s2 = suggestQuestions({ status: 'some', asked: [...asked, MORE], topic: lastTopicOf([...asked, MORE]) });
+  assert.ok(!s2.chips.includes(MORE));
+  // 저장된 결과로 맞춤 질문
+  const br = { b: { name: '지수' } };
+  const s3 = suggestQuestions({ status: 'couple', asked: ['요즘 자주 싸워요'], topic: 'conflict', breakup: br, partnerName: '지수', hasCompat: true });
+  assert.deepEqual(s3.chips.slice(0, 2), ['이별수 위험한 달은 언제야?', '지수님과 궁합 더 자세히 알려 줘']);
+  // 이별 이야기를 한 뒤엔 이미 답에서 본 이별수 질문을 다시 권하지 않고, 커플에게 재회 질문도 권하지 않음
+  const s4 = suggestQuestions({ status: 'couple', asked: ['헤어져야 할까?'], topic: 'breakup', breakup: br, handlerChips: ['재회할 수 있을까?'] });
+  assert.ok(!s4.chips.some((q) => q.includes('이별수') || q.includes('재회')));
+  assert.equal(s4.chips[0], '권태기 극복하는 법');
+  assert.equal(s4.link.href, '#breakup');
+  // 솔로에게는 커플 전제 질문을 권하지 않음
+  const s5 = suggestQuestions({ status: 'solo', asked: ['고백하기 좋은 날은?'], topic: 'confession' });
+  assert.ok(!s5.chips.some((q) => q.includes('우리 커플') || q.includes('싸워')));
+  // 안전 문제: 링크·해결책 칩 없이 조심스럽게
+  const safe = suggestQuestions({ status: 'couple', asked: ['남친이 때렸어'], topic: 'safety' });
+  assert.equal(safe.link, null);
+  assert.ok(!safe.chips.includes(MORE));
+  // 미성년이면 속궁합 링크를 숨김
+  assert.equal(suggestQuestions({ status: 'couple', asked: ['속궁합'], topic: 'intimacy', adult: false }).link, null);
+});
+
+test('추천 질문: 모든 추천 질문이 상담 주제로 인식된다', () => {
+  const topics = ['timing', 'ideal', 'charm', 'date', 'confession', 'lines', 'contact', 'conflict', 'trust', 'breakup', 'reunion',
+    'moveon', 'comfort', 'marriage', 'compat', 'intimacy', 'age', 'distance', 'lucky', 'today', 'period', 'self', 'safety', null];
+  const ctx = { partnerName: '지수', hasCompat: true, breakup: { b: { name: '지수' } }, reunion: { b: { name: '지수' } }, intimacy: { blocked: false }, adult: true };
+  for (const status of ['solo', 'some', 'couple', 'after']) {
+    for (const topic of topics) {
+      const { chips } = suggestQuestions({ ...ctx, status, topic, asked: [] });
+      assert.ok(chips.length >= 1, `${status}/${topic}`);
+      for (const q of chips) {
+        const t = detectTopic(q);
+        if (q === MORE) assert.equal(t, 'followup');
+        else assert.notEqual(t, 'fallback', `"${q}" (${status}/${topic})`);
+      }
+    }
+  }
 });

@@ -477,9 +477,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .typing span:nth-child(3) { animation-delay: .3s; }
 @keyframes blink { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
 
-.chat__chips { display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px; background: #ffffffb0; border-top: 2px solid #F5C2D7; scrollbar-width: none; }
-.chat__chips::-webkit-scrollbar { display: none; }
-.chat__chips button { flex: none; padding: 5px 12px; border: 2px solid var(--ink); border-radius: 999px; background: var(--paper); font-size: var(--s-1); cursor: pointer; }
+.chat__suggest { padding: 8px 12px 10px; background: #ffffffb0; border-top: 2px solid #F5C2D7; }
+.chat__suggest:empty { display: none; }
+.chat__suggest-title { margin: 0 0 6px; font-family: var(--f-display); font-size: var(--s-1); color: #6E5E85; }
+.chat__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chat__chips button {
+  padding: 5px 12px; border: 2px solid var(--ink); border-radius: 999px; background: var(--paper);
+  font-size: var(--s-1); line-height: 1.4; cursor: pointer; box-shadow: 0 2px 0 var(--ink); text-align: left;
+}
+.chat__chips button:active { transform: translateY(2px); box-shadow: none; }
+.chat__chips button[data-chip^="💡"] { background: var(--talisman-soft); }
+.chat__link {
+  padding: 5px 12px; border: 2px dashed var(--ink); border-radius: 999px; background: var(--lilac-soft);
+  font-size: var(--s-1); line-height: 1.4; color: var(--ink); text-decoration: none; white-space: nowrap;
+}
 .chat__form { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 10px 12px 12px; background: var(--paper); border-top: 3px solid var(--ink); }
 .chat__form textarea { resize: none; min-height: 46px; max-height: 120px; padding: 10px 12px; font-size: 16px; line-height: 1.4; border: 2.5px solid var(--ink); border-radius: 14px; background: #FFF8FB; }
 .chat__form .btn { padding: 10px 16px; }

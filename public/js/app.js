@@ -5,7 +5,7 @@ import {
   ELEMENTS, ELEMENT_KO, ELEMENT_HANJA, STEMS, STEMS_KO, BRANCHES, BRANCHES_KO,
 } from './reading.js';
 import { analyzeCompat } from './compat.js';
-import { createCounselor, starterChips } from './counsel.js';
+import { createCounselor } from './counsel.js';
 import { lunarToSolar, lunarMonthInfo } from './lunar.js';
 import { escapeHtml as esc, renderRich, josa, hasBatchim } from './text.js';
 import { SYSTEM_PROMPT, contextBlock, todayKST } from './persona.js';
@@ -14,6 +14,7 @@ import { analyzeBreakup, summaryBreakupForAI } from './breakup.js';
 import { analyzeReunion, summaryReunionForAI } from './reunion.js';
 import { analyzeIntimacy, summaryIntimacyForAI } from './intimacy.js';
 import { dailyFortune, weekFortune, summaryDailyForAI } from './daily.js';
+import { suggestQuestions, lastTopicOf } from './suggest.js';
 import {
   PRESET_LIMIT, personKey, loadPresets, findPreset, upsertPreset, removePreset, restorePreset, shortBirth, sanitizePerson,
 } from './presets.js';
@@ -1240,7 +1241,7 @@ function viewChat() {
       <button class="btn btn--ghost chat__clear" type="button" data-action="clear-chat">대화 지우기</button>
     </div>
     <div class="chat__log" id="chat-log" role="log" aria-live="polite">${state.chat.map((m) => (m.role === 'user' ? meMsg(m) : botMsg(m))).join('')}</div>
-    <div class="chat__chips" id="chat-chips">${chipsHtml(starterChips(a.person.status))}</div>
+    <div class="chat__suggest" id="chat-chips">${chipsHtml(chatSuggestions())}</div>
     <form class="chat__form" data-form="chat">
       <label class="sr" for="chat-input">고민 입력</label>
       <textarea id="chat-input" name="q" rows="1" maxlength="800" placeholder="연애 고민을 편하게 적어 주세요" required></textarea>
@@ -1249,8 +1250,30 @@ function viewChat() {
   </section>`;
 }
 
-function chipsHtml(chips) {
-  return chips.map((c) => `<button type="button" data-chip="${esc(c)}">${esc(c)}</button>`).join('');
+// 추천 질문: 방금 나눈 주제·연애 상태·저장된 결과로 다음 질문을 고른다
+function chatSuggestions(handlerChips) {
+  const a = me();
+  if (!a) return { chips: [], link: null, title: '' };
+  const asked = state.chat.filter((m) => m.role === 'user').map((m) => m.content);
+  if (handlerChips === undefined) {
+    const lastBot = [...state.chat].reverse().find((m) => m.role === 'assistant');
+    handlerChips = lastBot && lastBot.source === 'local' && asked.length ? lastBot.chips || [] : [];
+  }
+  const c = compat(), it = intimacy();
+  // 이별수·재회운은 그 결과의 A가 지금 상담 중인 사람일 때만 맞춤 질문에 쓴다
+  const mine = state.pair.a && personKey(state.pair.a) === personKey(state.me);
+  return suggestQuestions({
+    status: a.person.status || 'solo', asked, topic: lastTopicOf(asked), handlerChips,
+    partnerName: c ? c.b.name : null, hasCompat: !!c,
+    breakup: mine ? breakup() : null, reunion: mine ? reunion() : null,
+    intimacy: it, adult: it ? !it.blocked : undefined,
+  });
+}
+
+function chipsHtml(sug) {
+  if (!sug.chips.length && !sug.link) return '';
+  return `<p class="chat__suggest-title">${sug.title}</p>
+    <div class="chat__chips">${sug.chips.map((c) => `<button type="button" data-chip="${esc(c)}">${esc(c)}</button>`).join('')}${sug.link ? `<a class="chat__link" href="${sug.link.href}">${esc(sug.link.label)} →</a>` : ''}</div>`;
 }
 
 function scrollChat() {
@@ -1283,8 +1306,7 @@ async function ask(question) {
   if (state.chat.length > 60) state.chat = state.chat.slice(-60);
   store.set('chat', state.chat);
   log.insertAdjacentHTML('beforeend', botMsg(reply));
-  const chips = reply.chips && reply.chips.length ? reply.chips : starterChips(me().person.status);
-  document.getElementById('chat-chips').innerHTML = chipsHtml(chips);
+  document.getElementById('chat-chips').innerHTML = chipsHtml(chatSuggestions(reply.source === 'local' ? reply.chips || [] : []));
   scrollChat();
   state.busy = false;
 }
