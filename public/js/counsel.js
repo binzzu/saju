@@ -197,7 +197,16 @@ const HANDLERS = {
     };
   },
 
-  reunion({ a, fc }) {
+  reunion({ a, fc, reunion: ru }) {
+    if (ru) {
+      const thisYear = new Date().getFullYear();
+      const mn = (m) => (m.year !== thisYear ? `${m.year}년 ${m.month}월` : `${m.month}월`);
+      const d = ru.contactDays[0];
+      return {
+        text: `${ru.b.name}님과의 재회 이야기구나냥... 🧶\n\n🔮 **사주로 보면**\n재회운은 **${ru.score}점 (${ru.grade.title})**이에요. ${ru.pulls.length ? `다시 당기는 가장 큰 힘은 "${ru.pulls[0].short}"${josa(ru.pulls[0].short, '이고', '고').slice(ru.pulls[0].short.length)}` : '사주로 당기는 힘은 약한 편이고'}, ${ru.blocks.length ? `"${ru.blocks[0].short}" 부분은 조심해야 해요.` : '막는 힘은 크지 않아요.'}\n${ru.b.name}님은 **${ru.mind.type}**이라, ${ru.mind.how}\n다시 닿기 좋은 때는 **${ru.best.map(mn).join('**, **')}**이에요.\n\n💡 **해결책**\n• 첫 연락은 ${mn(ru.best[0])}, 특히 ${d.month}월 ${d.day}일(${d.wd})쯤 짧은 안부 한 줄로\n• 예시: "${ru.mind.msgs[0]}"\n• 다시 만나기 전에 꼭 해결할 것: ${ru.breakup.rules[0]}\n• 답이 없거나 거절하면 그 뜻을 존중하기 — 그게 나를 지키는 길이기도 해요`,
+        expr: 'think', chips: ['먼저 연락해도 될까?', '새 인연은 언제 와?', '마음 정리하는 법'],
+      };
+    }
     const cur = fc.current.sajuYear;
     const back = fc.months.filter((m) => m.good.some((k) => ['harmony', 'same', 'stemCombo', 'trine'].includes(k))).slice(0, 2);
     const windows = back.length ? back : fc.best.slice(0, 2);

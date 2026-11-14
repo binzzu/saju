@@ -16,7 +16,7 @@ const GWASUK = [1, 4, 7, 10];
 
 /* ───────────── 각자의 사주에 있는 이별 신호 ───────────── */
 
-function personalSignals(p) {
+export function personalSignals(p) {
   const out = [];
   const n = nim(p);
   const g = p.godCounts, gc = p.groupCounts;

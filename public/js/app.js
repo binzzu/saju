@@ -11,6 +11,7 @@ import { escapeHtml as esc, renderRich, josa, hasBatchim } from './text.js';
 import { SYSTEM_PROMPT, contextBlock, todayKST } from './persona.js';
 import { HOUR_LABELS } from './saju.js';
 import { analyzeBreakup, summaryBreakupForAI } from './breakup.js';
+import { analyzeReunion, summaryReunionForAI } from './reunion.js';
 import {
   PRESET_LIMIT, personKey, loadPresets, findPreset, upsertPreset, removePreset, restorePreset, shortBirth, sanitizePerson,
 } from './presets.js';
@@ -94,6 +95,19 @@ function analyzeCached(person) {
 
 function savePresets() { store.set('presets', state.presets); }
 
+// 재회운 결과 (이별수와 같은 두 사람·같은 "결과 보기" 상태를 쓴다)
+function reunion() {
+  const { a: pa, b: pb, done } = state.pair;
+  if (!done || !pa || !pb || personKey(pa) === personKey(pb)) return null;
+  const key = `${personKey(pa)}#${personKey(pb)}`;
+  if (memo.reunionKey !== key) {
+    const A = analyzeCached(pa), B = analyzeCached(pb);
+    memo.reunion = A && B ? analyzeReunion(A, B) : null;
+    memo.reunionKey = key;
+  }
+  return memo.reunion;
+}
+
 // 이별수 결과 (두 사람이 정해지고 "결과 보기"를 눌렀을 때만)
 function breakup() {
   const { a: pa, b: pb, done } = state.pair;
@@ -107,7 +121,7 @@ function breakup() {
   return memo.breakup;
 }
 
-const counselor = createCounselor(() => ({ a: me(), fc: forecast(), compat: compat(), breakup: breakup() }));
+const counselor = createCounselor(() => ({ a: me(), fc: forecast(), compat: compat(), breakup: breakup(), reunion: reunion() }));
 
 /* ───────────── 웹툰 조각 ───────────── */
 
@@ -661,7 +675,7 @@ function viewReading() {
   h += talk('coco', 'smug', p('그 사람과의 <strong>궁합</strong>도 궁금하지 않아요?'), { side: 'right', scene: 'mint' });
   h += `<div class="actions"><a class="btn btn--pink" href="#compat">궁합 보러 가기</a><a class="btn btn--lilac" href="#chat">묘연에게 상담하기</a><button class="btn" type="button" data-action="share-reading">결과 공유하기</button></div>`;
   h += talk('myo', 'smile', p(`사주는 지도일 뿐, 길을 고르는 건 ${n}님이야. 언제든 놀러 와라냥.`), { scene: 'night' });
-  h += `<div class="actions">${findPreset(state.presets, state.me) ? '' : '<button class="btn btn--pink" type="button" data-action="preset-save-current">📌 프리셋에 저장</button>'}<a class="btn btn--ghost" href="#start" style="color:#fff;border-color:#fff">🏠 처음으로 · 다른 사람 보기</a></div>`;
+  h += `<div class="actions">${findPreset(state.presets, state.me) ? '' : '<button class="btn btn--pink" type="button" data-action="preset-save-current">📌 프리셋에 저장</button>'}<a class="btn btn--ghost" href="#start" style="color:#fff;border-color:#fff">🏠 처음으로 · 다른 사람 보기</a>${a.person.status === 'after' ? '<a class="btn btn--lilac" href="#reunion">💞 재회운 보러 가기</a>' : ''}</div>`;
   return h;
 }
 
@@ -708,7 +722,7 @@ function compatResultHtml(c) {
       <span class="rx__stamp" aria-hidden="true">緣</span>
     </div></section>`;
   h += talk('myo', 'smile', p('궁합은 정해진 답이 아니라 서로를 이해하는 힌트야. 더 궁금한 건 상담실로 와라냥.'), { scene: 'night' });
-  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 궁합으로 상담하기</a><button class="btn btn--lilac" type="button" data-action="new-partner">다른 사람과 궁합 보기</button><button class="btn" type="button" data-action="share-compat">궁합 공유하기</button><button class="btn" type="button" data-action="breakup-from-compat">💔 이 커플 이별수 보기</button></div>`;
+  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 궁합으로 상담하기</a><button class="btn btn--lilac" type="button" data-action="new-partner">다른 사람과 궁합 보기</button><button class="btn" type="button" data-action="share-compat">궁합 공유하기</button><button class="btn" type="button" data-action="breakup-from-compat">💔 이 커플 이별수 보기</button>${state.me && state.me.status === 'after' ? '<button class="btn" type="button" data-action="reunion-from-compat">💞 이 사람과 재회운 보기</button>' : ''}</div>`;
   return h;
 }
 
@@ -755,7 +769,21 @@ function slotCard(slot) {
     <span class="slot__meta">${shortBirth(p)}</span></div>`;
 }
 
-function pairPicker() {
+const PAIR_MODE = {
+  breakup: { head: '💔 이별수를 볼 두 사람', run: '💔 이별수 결과 보기', resultId: 'breakup-result', hint: '' },
+  reunion: { head: '💞 재회운을 볼 두 사람', run: '💞 재회운 결과 보기', resultId: 'reunion-result', hint: '<p class="note pair__hint">A에는 <b>나</b>, B에는 <b>다시 만나고 싶은 그 사람</b>을 넣어 주세요.</p>' },
+};
+const pairMode = () => ((location.hash || '').slice(1) === 'reunion' ? 'reunion' : 'breakup');
+
+function modeSwitch(mode) {
+  return `<nav class="modes" aria-label="이별·재회 보기 선택">
+    <a href="#breakup" class="${mode === 'breakup' ? 'is-on' : ''}" ${mode === 'breakup' ? 'aria-current="page"' : ''}>💔 이별수</a>
+    <a href="#reunion" class="${mode === 'reunion' ? 'is-on' : ''}" ${mode === 'reunion' ? 'aria-current="page"' : ''}>💞 재회운</a>
+  </nav>`;
+}
+
+function pairPicker(mode = 'breakup') {
+  const M = PAIR_MODE[mode];
   const cands = pairCandidates();
   const row = (slot) => {
     const cur = state.pair[slot] ? personKey(state.pair[slot]) : '';
@@ -764,26 +792,31 @@ function pairPicker() {
       <div class="pchips">${chips}<button class="mini mini--ghost ${state.pairEdit === slot ? 'is-on' : ''}" type="button" data-action="pair-input" data-slot="${slot}">✏️ 직접 입력</button></div></div>`;
   };
   return `<section class="panel scene-lilac pairbox" id="pairbox"><div class="info">
-    <h3>💔 이별수를 볼 두 사람</h3>
+    <h3>${M.head}</h3>${M.hint}
     <div class="pair">${slotCard('a')}<button class="pair__swap" type="button" data-action="pair-swap" aria-label="A와 B 바꾸기">⇄</button>${slotCard('b')}</div>
     ${cands.length ? '' : '<p class="note">저장한 프리셋이 없어요. "직접 입력"으로 적거나, 처음 화면에서 프리셋을 저장해 두면 여기서 바로 고를 수 있어요.</p>'}
     ${row('a')}${row('b')}
     <p class="form-error" role="alert" data-pair-error></p>
-    <div class="pair__run"><button class="btn btn--pink" type="button" data-action="pair-run">💔 이별수 결과 보기</button></div>
+    <div class="pair__run"><button class="btn btn--pink" type="button" data-action="pair-run">${M.run}</button></div>
   </div></section>`;
 }
 
-function riskHeart(risk) {
+// 하트 게이지: 이별수(금 간 하트) · 재회운(꿰맨 하트)
+function riskHeart(risk, { label = '이별수', color = '#7E63C9', seam = 'crack' } = {}) {
   const top = 12 + (100 - risk) * 0.84;
   const heart = 'M60 102 C 20 76, 4 54, 4 32 C 4 14, 18 4, 32 4 C 44 4, 54 11, 60 22 C 66 11, 76 4, 88 4 C 102 4, 116 14, 116 32 C 116 54, 100 76, 60 102 Z';
-  return `<svg class="heart" viewBox="0 0 120 108" role="img" aria-label="이별수 ${risk}점">
-    <defs><clipPath id="brkClip"><path d="${heart}"/></clipPath></defs>
+  const line = seam === 'crack'
+    ? '<path d="M60 22 L54 38 L64 50 L55 64 L63 78 L58 92" fill="none" stroke="#2A1B3D" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>'
+    : `<path d="M60 22 L56 40 L62 56 L57 74 L60 96" fill="none" stroke="#2A1B3D" stroke-width="1.6" stroke-dasharray="3 3"/>
+       ${[30, 44, 58, 72, 86].map((y) => `<path d="M${52} ${y - 3} L${66} ${y + 3}" stroke="#2A1B3D" stroke-width="2.4" stroke-linecap="round"/>`).join('')}`;
+  return `<svg class="heart" viewBox="0 0 120 108" role="img" aria-label="${label} ${risk}점">
+    <defs><clipPath id="gaugeClip"><path d="${heart}"/></clipPath></defs>
     <path d="${heart}" fill="#fff"/>
-    <g clip-path="url(#brkClip)"><rect class="heart__fill" x="0" y="${top}" width="120" height="120" fill="#7E63C9"/></g>
-    <path d="M60 22 L54 38 L64 50 L55 64 L63 78 L58 92" fill="none" stroke="#2A1B3D" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>
+    <g clip-path="url(#gaugeClip)"><rect class="heart__fill" x="0" y="${top}" width="120" height="120" fill="${color}"/></g>
+    ${line}
     <path d="${heart}" fill="none" stroke="#2A1B3D" stroke-width="4" stroke-linejoin="round"/>
     <text class="heart__num" x="60" y="58" text-anchor="middle" font-size="28" fill="#2A1B3D" stroke="#fff" stroke-width="5" stroke-linejoin="round" paint-order="stroke" data-count="${risk}">${risk}</text>
-    <text x="60" y="73" text-anchor="middle" font-size="10.5" fill="#2A1B3D" stroke="#fff" stroke-width="3.5" stroke-linejoin="round" paint-order="stroke">이별수</text>
+    <text x="60" y="73" text-anchor="middle" font-size="10.5" fill="#2A1B3D" stroke="#fff" stroke-width="3.5" stroke-linejoin="round" paint-order="stroke">${label}</text>
   </svg>`;
 }
 
@@ -896,18 +929,135 @@ function breakupResultHtml(r) {
   // 에필로그
   h += talk('myo', 'smile', p('이별수가 있다고 꼭 헤어지는 게 아니고, 없다고 저절로 지켜지는 것도 아니야.') + p('약한 곳을 아는 커플이 제일 오래간다냥.'), { scene: 'night' });
   h += info('<p class="safety">💡 <b>꼭 기억해요.</b> 폭력·협박·통제·스토킹이 있는 관계라면 이별을 막는 게 답이 아니에요. 지금 안전이 먼저예요. 위험하면 <b>112</b>, 데이트폭력 상담은 <b>여성긴급전화 1366</b>(24시간).</p>', 'paper');
-  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 결과로 상담하기</a><button class="btn btn--lilac" type="button" data-action="pair-again">다른 두 사람 보기</button><button class="btn" type="button" data-action="share-breakup">결과 공유하기</button></div>`;
+  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 결과로 상담하기</a><button class="btn btn--lilac" type="button" data-action="pair-again">다른 두 사람 보기</button><button class="btn" type="button" data-action="share-breakup">결과 공유하기</button><a class="btn" href="#reunion">💞 같은 두 사람 재회운 보기</a></div>`;
   return h;
 }
 
-function viewBreakup() {
+const RE_LEVEL_COLOR = { high: 'var(--blush)', mid: 'var(--lilac)', low: '#D8D2E4' };
+
+function reunionYears(r) {
+  return `<ul class="years">${r.years.map((y) => `<li class="year">
+    <div class="year__when">${y.year}<small>${y.pillar.hangul}년 · ${y.animal}띠</small></div>
+    <div>
+      <div class="meter" role="img" aria-label="재회 기운 ${y.score}"><span style="width:${y.score}%;background:${RE_LEVEL_COLOR[y.level.key]}"></span></div>
+      <div class="year__line"><span>${y.level.emoji} ${y.main.label}</span><b>${y.level.label}</b></div>
+      <div class="note">${esc(y.main.line)}</div>
+    </div>
+  </li>`).join('')}</ul>`;
+}
+
+function reunionMonths(r) {
+  const bestSet = new Set(r.best.map((m) => `${m.year}-${m.month}`));
+  const avoidSet = new Set(r.avoid.map((m) => `${m.year}-${m.month}`));
+  const items = r.months.map((m) => {
+    const k = `${m.year}-${m.month}`;
+    const mark = bestSet.has(k) ? '💌' : avoidSet.has(k) ? '🚫' : '';
+    return `<li class="month lv-${m.level.key}">
+      <div class="month__bar" style="height:${Math.max(8, Math.round(8 + ((m.score - 5) / 90) * 92))}%">${mark ? `<span class="month__heart">${mark}</span>` : ''}</div>
+      <div class="month__label">${m.month === 1 ? `${String(m.year).slice(2)}.` : ''}${m.month}월<span class="month__score">${m.score}</span></div>
+    </li>`;
+  }).join('');
+  const sr = r.months.map((m) => `${m.year}년 ${m.month}월 ${m.score}`).join(', ');
+  return `<p class="sr">월별 재회 기운: ${sr}</p><ul class="months months--reunion" aria-hidden="true">${items}</ul>
+    <p class="legend"><span><i style="background:var(--blush)"></i>기회</span><span><i style="background:var(--lilac)"></i>보통</span><span><i style="background:#D8D2E4"></i>쉬어 가기</span></p>`;
+}
+
+function pullItem(f) {
+  const pull = f.pts > 0;
+  const w = Math.min(100, Math.round((Math.abs(f.pts) / 14) * 100));
+  return `<li class="part ${pull ? 'part--pull' : 'part--block'}">
+    <div class="part__head"><h4>${f.icon} ${esc(f.label)}</h4><span class="part__pts">${pull ? (f.pts >= 8 ? '🧶 강하게 당김' : '🧶 당기는 힘') : '🚧 막는 힘'}</span></div>
+    <div class="meter"><span style="width:${Math.max(6, w)}%"></span></div>
+    ${f.detail ? `<p class="part__detail">${esc(f.detail)}</p>` : ''}
+    <p class="part__short">${esc(f.short)}</p><p class="part__text">${esc(f.text)}</p>
+  </li>`;
+}
+
+function reunionResultHtml(r) {
+  const A = esc(r.a.name), B = esc(r.b.name);
+  const base = new Date().getFullYear();
+  const side = (x) => `<div class="vs__side"><div class="vs__emoji" aria-hidden="true">${DAY_MASTERS[x.dm].emoji}</div>
+    <div class="tile el-${x.dmEl}"><span class="hanja">${STEMS[x.dm]}</span><small>${STEMS_KO[x.dm]}·${ELEMENT_KO[x.dmEl]}</small></div>
+    <div class="vs__name">${esc(x.name)}</div><div class="vs__cat">${DAY_MASTERS[x.dm].cat}</div></div>`;
+  const firstBest = r.best[0];
   let h = '';
-  h += talk('myo', 'think', p('이별수가 궁금하다고? 두 사람을 골라 줘냥.') + p('저장한 <strong>프리셋</strong>에서 고르거나, 직접 적어도 돼. 그 둘 사이에 언제, 어떻게 금이 가기 쉬운지, 그리고 <strong>어떻게 막는지</strong>까지 알려 줄게.'), { scene: 'night', caption: '묘연 사주방 · 인연의 실 점검' });
-  h += pairPicker();
+  h += episode('재회편', `${A} → ${B}`);
+  h += talk('myo', 'smile', p(`${A}님과 ${B}님 사이의 실, 아직 어디에 걸려 있는지 볼게냥.`) + p('재회운은 "다시 만날 수 있는 길"을 보여 줄 뿐, 그 길을 걸을지는 <strong>두 사람 모두의 마음</strong>이 정하는 거야.'), { scene: 'night' });
+  h += info(`<div class="vs">${side(r.a)}<div class="vs__x" aria-hidden="true">🧶</div>${side(r.b)}</div>`, 'lilac');
+  h += talk('coco', 'sparkle', p('두근두근… 재회운 나왔어요!'), { side: 'right', scene: 'pink', sfx: '두근' });
+  h += `<section class="panel scene-speed"><div class="score">${riskHeart(r.score, { label: '재회운', color: '#FF6FA8', seam: 'stitch' })}
+      <p class="score__grade">${r.grade.emoji} ${r.grade.title}</p><p class="score__line">${r.grade.line}</p>
+      <p class="note score__note">사주로 본 "다시 이어지기 쉬운 정도"예요. 상대의 마음을 대신 정해 주는 점수는 아니에요.</p></div></section>`;
+
+  // 1화: 다시 이어질 실
+  h += episode('1화', '아직 이어진 실, 끊어진 실');
+  h += info(`<h3>다시 당기는 힘 · 막는 힘</h3><ul class="parts">${r.factors.map(pullItem).join('')}</ul>`);
+  h += info(`<h3>${r.mind.emoji} ${B}님의 마음 — ${r.mind.type}</h3><p>${esc(r.mindText)}</p><h3 style="margin-top:14px">🫧 ${A}님의 마음</h3><p>${esc(r.myMind)}</p>`, 'pink');
+  h += r.pulls.length
+    ? talk('myo', 'smug', p(`두 사람을 다시 당기는 가장 큰 힘은 <strong>${esc(r.pulls[0].short)}</strong>${josa(r.pulls[0].short, '이야', '야').slice(r.pulls[0].short.length)}.`) + (r.blocks.length ? p(`대신 <strong>${esc(r.blocks[0].short)}</strong> 부분은 조심해야 해.`) : p('막는 힘이 크지 않아서 타이밍만 잘 잡으면 돼냥.')), { scene: 'lilac' })
+    : talk('myo', 'worry', p('사주로 보면 두 사람을 다시 당기는 힘이 약한 편이야.') + p('그래도 마음이 있다면, 아래 작전대로 한 번은 진심을 전해 봐도 돼. 답은 상대가 정하는 거니까.'), { scene: 'lilac' });
+
+  // 2화: 지난 이별의 이유
+  const bp = r.breakup.pattern;
+  h += episode('2화', '같은 이유로 또 헤어지지 않으려면');
+  h += talk('myo', 'think', p(`두 사람 사주로 보면 이별의 모양은 <strong>${bp.emoji} ${bp.title}</strong>에 가까워.`) + p(bp.text), { scene: 'night' });
+  h += info(`<h3>🔁 재회 전에 해결할 것</h3><ul class="ticks">${r.breakup.rules.map((t) => `<li>${esc(t)}</li>`).join('')}</ul><p class="stop">✋ 헤어진 이유가 지금은 달라졌는지 먼저 확인하세요. 그대로라면 다시 만나도 같은 자리에서 멈추기 쉬워요.</p>`, 'yellow');
+
+  // 3화: 시기
+  h += episode('3화', '다시 닿는 시기');
+  h += info(`<h3>앞으로 5년, 해마다 재회 기운</h3>${reunionYears(r)}`);
+  const bestLines = r.best.map((m) => `<li><b>💌 ${monthName(m, base)}</b> — ${esc(m.good.map((x) => x.line).slice(0, 2).join(' / ') || '잔잔하게 기회가 열리는 시기')}</li>`).join('');
+  const avoidLines = r.avoid.map((m) => `<li><b>🚫 ${monthName(m, base)}</b> — ${esc(m.bad.length ? m.bad[0].line : '엇갈리기 쉬운 시기')}. 이때는 연락을 쉬어 가세요.</li>`).join('');
+  h += info(`<h3>앞으로 12개월</h3>${reunionMonths(r)}<ul class="ticks ticks--plain">${bestLines}${avoidLines}</ul>`);
+  h += info(`<h3>📅 첫 연락 길일</h3><p class="note">가장 가까운 기회의 달(${monthName(firstBest, base)}) 안에서 고른 날이에요.</p>
+    <ul class="days">${r.contactDays.map((d) => `<li class="day"><b>${d.month}월 ${d.day}일</b><span>${d.wd}요일</span><small>${esc(d.main.label)}</small></li>`).join('')}</ul>`, 'mint');
+
+  // 4화: 재회 작전
+  h += episode('4화', '재회 작전');
+  h += talk('coco', 'think', p('그럼 어떻게 연락해야 해요?'), { side: 'right', scene: 'mint' });
+  h += talk('myo', 'smug', p(`${B}님은 <strong>${r.mind.type}</strong>이니까, 거기에 맞춰 다가가야 해.`) + p(esc(r.mind.how)), { scene: 'lilac' });
+  h += info(`<h3>🧭 단계별 작전</h3><ol class="steps">
+      <li><b>마음 정리</b> — 첫 연락 전까지는 연락을 쉬고, 헤어진 이유와 "지금은 뭐가 달라졌는지"를 적어 보세요.</li>
+      <li><b>첫 연락</b> — ${monthName(firstBest, base)}, 그중에서도 ${r.contactDays.map((d) => d.day).join('·')}일쯤. 짧고 가벼운 안부 한 줄이면 충분해요.</li>
+      <li><b>답을 기다리기</b> — 답이 없으면 1~2주는 기다리세요. 끝내 답이 없거나 거절하면 그게 상대의 대답이에요.</li>
+      <li><b>다시 만난다면</b> — 첫 만남은 짧고 가볍게, 지난 이야기는 두 번째 만남부터.</li>
+      <li><b>다시 시작한다면</b> — 2화의 "재회 전에 해결할 것"을 둘의 약속으로 만들기.</li>
+    </ol>`, 'yellow');
+  h += info(`<h3>💬 첫 연락 메시지 예시</h3><ul class="msgs">${r.mind.msgs.map((t) => `<li>${esc(t)}</li>`).join('')}</ul><p class="note">○○ 부분은 두 사람만 아는 장소·일로 바꿔 쓰세요.</p>`);
+  h += info(`<h3>🙅 하지 말아야 할 것</h3><ul class="ticks">${r.dont.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, 'pink');
+  h += info(`<h3>☕ 다시 만나는 날</h3><ul class="ticks">${r.meet.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, 'mint');
+  const rx = [
+    `${monthName(firstBest, base).replace(/\d+월$/, '')}${r.contactDays[0].month}월 ${r.contactDays[0].day}일(${r.contactDays[0].wd})쯤 가벼운 안부 한 줄`,
+    r.mind.how,
+    r.breakup.rules[0],
+    `${r.luck.color} 포인트 아이템으로 두 사람 사이에 ${ELEMENT_KO[r.coupleEl]} 기운 채우기`,
+  ];
+  h += `<section class="panel"><div class="rx">
+      <div class="rx__head"><h3 class="lead-em" style="font-size:var(--s-5)">재회 처방전</h3><span>${A} → ${B} · 담당: 묘연</span></div>
+      <ol>${rx.map((t) => `<li>${esc(t)}</li>`).join('')}</ol>
+      <span class="rx__stamp" aria-hidden="true">緣</span>
+    </div></section>`;
+
+  // 5화: 재회가 답이 아닐 때
+  h += episode('5화', '재회가 답이 아닐 때');
+  const nl = r.newLove.map((m) => `${monthName(m, base)}(${m.reason.label})`).join(', ');
+  h += talk('myo', r.score < 40 ? 'worry' : 'think', p(r.score < 40 ? '솔직히 말하면, 지금은 다시 잇는 실보다 새로운 실이 더 가까이 있어 보여.' : '재회가 꼭 정답은 아니야. 그리움과 사랑은 다를 수 있거든.') + p(`${A}님에게 새 인연운이 좋은 달은 <strong>${nl}</strong>이야. 재회를 기다리느라 이 시기를 놓치지는 마냥.`), { scene: 'night' });
+  h += info(`<p class="safety">💡 <b>이럴 땐 재회보다 나를 지키세요.</b><br>• 폭력·협박·통제·반복된 거짓말 때문에 헤어졌다면 다시 만나지 않는 게 맞아요. 위험하면 <b>112</b>, 데이트폭력 상담은 <b>여성긴급전화 1366</b>(24시간).<br>• 상대가 연락하지 말라고 했거나 차단했다면 그 뜻을 존중하세요. 거절 뒤에도 계속 연락하면 스토킹이 될 수 있어요.<br>• 재회를 생각할수록 내가 작아진다면, 지금 필요한 건 그 사람보다 나를 돌보는 시간이에요.</p>`, 'paper');
+  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 결과로 상담하기</a><a class="btn btn--lilac" href="#breakup">💔 같은 두 사람 이별수 보기</a><button class="btn" type="button" data-action="share-reunion">결과 공유하기</button><button class="btn" type="button" data-action="pair-again">다른 두 사람 보기</button></div>`;
+  return h;
+}
+
+function viewBreakup(mode = 'breakup') {
+  const M = PAIR_MODE[mode];
+  let h = modeSwitch(mode);
+  h += mode === 'breakup'
+    ? talk('myo', 'think', p('이별수가 궁금하다고? 두 사람을 골라 줘냥.') + p('저장한 <strong>프리셋</strong>에서 고르거나, 직접 적어도 돼. 그 둘 사이에 언제, 어떻게 금이 가기 쉬운지, 그리고 <strong>어떻게 막는지</strong>까지 알려 줄게.'), { scene: 'night', caption: '묘연 사주방 · 인연의 실 점검' })
+    : talk('myo', 'smile', p('다시 이어질 수 있을지 궁금하구나냥. 🧶') + p('너와 그 사람을 골라 줘. 끊어진 실이 아직 어디에 걸려 있는지, <strong>언제 연락하면 닿는지</strong>, 그리고 <strong>어떻게 다가가야 하는지</strong>까지 알려 줄게.'), { scene: 'night', caption: '묘연 사주방 · 끊어진 실 잇기' });
+  h += pairPicker(mode);
   if (state.pairEdit) h += `<div id="pairform">${talisman(state.pairEdit === 'a' ? 'pairA' : 'pairB', null)}</div>`;
-  const r = breakup();
-  if (r) h += `<div id="breakup-result">${breakupResultHtml(r)}</div>`;
-  else if (state.pair.a && state.pair.b) h += talk('coco', 'happy', p('두 사람이 정해졌어요! 위의 <strong>💔 이별수 결과 보기</strong>를 눌러 주세요.'), { side: 'right', scene: 'pink' });
+  const r = mode === 'breakup' ? breakup() : reunion();
+  if (r) h += `<div id="${M.resultId}">${mode === 'breakup' ? breakupResultHtml(r) : reunionResultHtml(r)}</div>`;
+  else if (state.pair.a && state.pair.b) h += talk('coco', 'happy', p(`두 사람이 정해졌어요! 위의 <strong>${M.run}</strong>를 눌러 주세요.`), { side: 'right', scene: 'pink' });
   return h;
 }
 
@@ -1011,8 +1161,8 @@ function showLive(text) {
 }
 
 async function askAI() {
-  const br = breakup();
-  const context = summaryForAI(me(), forecast(), compat()) + (br ? `\n${summaryBreakupForAI(br)}` : '');
+  const br = breakup(), ru = reunion();
+  const context = summaryForAI(me(), forecast(), compat()) + (br ? `\n${summaryBreakupForAI(br)}` : '') + (ru ? `\n${summaryReunionForAI(ru)}` : '');
   const history = chatHistory();
   const text = state.ai === 'artifact' ? await askArtifact(history, context) : await askServer(history, context);
   if (!text || !text.trim()) return null;
@@ -1073,12 +1223,13 @@ const app = document.getElementById('app');
 
 function render() {
   const route = (location.hash || '#home').slice(1);
-  const tab = route === 'home' || route === 'start' ? 'start' : route;
+  const tab = route === 'home' || route === 'start' ? 'start' : route === 'reunion' ? 'breakup' : route;
   let html;
   if (route === 'reading') html = viewReading();
   else if (route === 'compat') html = viewCompat();
   else if (route === 'chat') html = viewChat();
-  else if (route === 'breakup') html = viewBreakup();
+  else if (route === 'breakup') html = viewBreakup('breakup');
+  else if (route === 'reunion') html = viewBreakup('reunion');
   if (html == null) html = viewHome();
   app.innerHTML = html;
   document.querySelectorAll('.tabs a').forEach((t) => {
@@ -1086,14 +1237,14 @@ function render() {
     else t.removeAttribute('aria-current');
   });
   document.title = {
-    reading: '내 연애 사주 — 묘연의 연애사주', compat: '궁합 — 묘연의 연애사주', chat: '상담실 — 묘연의 연애사주', breakup: '이별수 — 묘연의 연애사주',
+    reading: '내 연애 사주 — 묘연의 연애사주', compat: '궁합 — 묘연의 연애사주', chat: '상담실 — 묘연의 연애사주', breakup: '이별수 — 묘연의 연애사주', reunion: '재회운 — 묘연의 연애사주',
   }[route] || '묘연의 연애사주 — 고양이 점술사가 웹툰으로 풀어 주는 연애 사주·궁합';
   if (route === 'chat') scrollChat();
   if (route === 'start') {
     document.getElementById('start')?.scrollIntoView({ block: 'start' });
   } else if (pendingScroll && document.getElementById(pendingScroll)) {
     document.getElementById(pendingScroll).scrollIntoView({ block: 'start' });
-    if (pendingScroll === 'compat-result' || pendingScroll === 'breakup-result') animateScore();
+    if (['compat-result', 'breakup-result', 'reunion-result'].includes(pendingScroll)) animateScore();
   } else {
     window.scrollTo(0, 0);
   }
@@ -1244,7 +1395,7 @@ app.addEventListener('click', (ev) => {
     const { a, b } = state.pair;
     state.pair.a = b; state.pair.b = a;
     savePair();
-    pendingScroll = state.pair.done && breakup() ? 'breakup-result' : 'pairbox';
+    pendingScroll = state.pair.done && breakup() ? PAIR_MODE[pairMode()].resultId : 'pairbox';
     render();
     return;
   }
@@ -1257,12 +1408,22 @@ app.addEventListener('click', (ev) => {
     state.pair.done = true;
     state.pairEdit = null;
     savePair();
-    pendingScroll = 'breakup-result';
+    pendingScroll = PAIR_MODE[pairMode()].resultId;
     render();
     return;
   }
   if (action === 'pair-again') { pendingScroll = 'pairbox'; render(); return; }
   if (action === 'share-breakup') { shareBreakup(); return; }
+  if (action === 'share-reunion') { shareReunion(); return; }
+  if (action === 'reunion-from-compat') {
+    if (!state.me || !state.partner) return;
+    state.pair = { a: { ...state.me }, b: { ...state.partner }, done: true };
+    state.pairEdit = null;
+    savePair();
+    pendingScroll = 'reunion-result';
+    if (location.hash === '#reunion') render(); else location.hash = '#reunion';
+    return;
+  }
   if (action === 'breakup-from-compat') {
     if (!state.me || !state.partner) return;
     state.pair = { a: { ...state.me }, b: { ...state.partner }, done: true };
@@ -1369,6 +1530,13 @@ function shareBreakup() {
   const r = breakup();
   if (!r) return;
   share(`🐾 묘연의 연애사주\n${r.a.name} × ${r.b.name} 이별수 ${r.risk}점, ${r.grade.title} ${r.grade.emoji}\n이별이 온다면 "${r.pattern.title}" — 막는 법: ${r.rules[0]}`);
+}
+
+function shareReunion() {
+  const r = reunion();
+  if (!r) return;
+  const b0 = r.best[0];
+  share(`🐾 묘연의 연애사주\n${r.a.name} → ${r.b.name} 재회운 ${r.score}점, ${r.grade.title} ${r.grade.emoji}\n다시 닿기 좋은 때: ${b0.year}년 ${b0.month}월 · ${r.b.name}님은 "${r.mind.type}"`);
 }
 
 function shareCompat() {

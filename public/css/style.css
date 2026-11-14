@@ -653,3 +653,41 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (max-width: 360px) {
   .tabs a { padding: 5px 7px; font-size: 13px; }
 }
+
+/* ───────── 재회운 ───────── */
+#reunion-result { scroll-margin-top: 64px; }
+.modes {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 0 var(--gutter); padding: 5px;
+  border-radius: 999px; background: #ffffff14;
+}
+.modes a {
+  display: block; padding: 9px 10px; border-radius: 999px; text-align: center; text-decoration: none;
+  font-family: var(--f-display); font-size: var(--s-3); color: #E9E1FF;
+}
+.modes a.is-on { background: var(--paper); color: var(--ink); box-shadow: 0 3px 0 var(--ink); }
+.pair__hint { margin: 4px 0 0; }
+.episode__no { flex: none; white-space: nowrap; }
+.part--pull .meter > span { background: var(--blush); }
+.part--block .meter > span { background: #A8A3B8; }
+.part--block { padding: 10px 12px; margin: 0 -4px; border-radius: 12px; background: #F3F1F8; }
+.part--pull .part__pts, .part--block .part__pts { white-space: nowrap; font-size: var(--s-1); }
+.months--reunion .month__bar { background: var(--lilac); }
+.months--reunion .lv-high .month__bar { background: var(--blush); }
+.months--reunion .lv-low .month__bar { background: #D8D2E4; }
+.days { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.day {
+  display: grid; justify-items: center; gap: 1px; padding: 10px 4px; text-align: center;
+  border: 2.5px solid var(--ink); border-radius: 14px; background: var(--paper); box-shadow: 0 3px 0 var(--ink);
+}
+.day b { font-family: var(--f-display); font-weight: 400; font-size: var(--s-4); line-height: 1.2; }
+.day span { font-size: var(--s-1); }
+.day small { font-size: 12px; color: #5B4A72; line-height: 1.3; }
+.msgs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.msgs li {
+  position: relative; justify-self: start; max-width: 92%; padding: 9px 13px; border: 2px solid var(--ink);
+  border-radius: 16px 16px 16px 4px; background: #FFF8D9; font-size: var(--s-2);
+}
+@media (max-width: 380px) {
+  .tabs a { padding: 5px 6px; font-size: 12.5px; }
+  .tabs { gap: 2px; padding: 3px; }
+}

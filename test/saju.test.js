@@ -8,6 +8,7 @@ import { analyzePerson, buildForecast, summaryForAI, computeDaewoon, dailyLove }
 import { SYSTEM_PROMPT, contextBlock } from '../public/js/persona.js';
 import { analyzeCompat } from '../public/js/compat.js';
 import { analyzeBreakup, periodRisk, summaryBreakupForAI } from '../public/js/breakup.js';
+import { analyzeReunion, periodReunion, summaryReunionForAI } from '../public/js/reunion.js';
 import { createCounselor, detectTopic } from '../public/js/counsel.js';
 import { josa, renderRich } from '../public/js/text.js';
 import {
@@ -237,4 +238,39 @@ test('이별수: 배우자 자리 충은 위험, 육합은 보호 요인', () =>
   const r2 = periodRisk(zi, chou, 0, 1);  // 丑: 子와 육합
   assert.ok(r1.risk > r2.risk);
   assert.equal(r1.main.key, 'clash');
+});
+
+test('재회운: 점수·당기는 힘·마음 성향·시기·연락 길일·작전이 만들어진다', () => {
+  const a = analyzePerson(minji);
+  const b = analyzePerson(junho);
+  const now = Date.UTC(2026, 10, 14);
+  const r = analyzeReunion(a, b, now);
+  assert.ok(r.score >= 5 && r.score <= 95);
+  assert.ok(r.grade.title.startsWith('재회운'));
+  assert.ok(r.factors.some((f) => f.label === '다시 끌리는 힘'));
+  assert.ok(r.factors.some((f) => f.label === '배우자 자리의 복원력'));
+  assert.ok(['추억형', '자존심형', '표현형', '현실형', '책임형'].includes(r.mind.type));
+  assert.equal(r.mind.msgs.length, 2);
+  assert.equal(r.years.length, 5);
+  assert.equal(r.months.length, 12);
+  assert.equal(r.best.length, 3);
+  // 연락 길일은 가장 가까운 기회의 달 안, 날짜순, 오늘 이후
+  assert.equal(r.contactDays.length, 3);
+  for (const d of r.contactDays) assert.equal(`${d.year}-${d.month}`, `${r.best[0].year}-${r.best[0].month}`);
+  assert.ok(Date.UTC(r.contactDays[0].year, r.contactDays[0].month - 1, r.contactDays[0].day) > now);
+  assert.ok(r.breakup.pattern.title && r.breakup.rules.length >= 1);
+  assert.ok(r.dont.some((t) => /연달아/.test(t)));
+  assert.match(summaryReunionForAI(r), /재회운 지수/);
+});
+
+test('재회운: 배우자 자리와 합이 드는 달은 재회 기운이 높다', () => {
+  const a = analyzePerson(minji);
+  const b = analyzePerson(junho);
+  // 일지와 육합하는 지지 vs 충하는 지지
+  const HARMONY = [1, 0, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2];
+  const good = periodReunion(a, b, 0, HARMONY[a.dayBranch]);
+  const bad = periodReunion(a, b, 0, (a.dayBranch + 6) % 12);
+  assert.ok(good.score > bad.score);
+  assert.ok(good.good.some((g) => g.key === 'harmony'));
+  assert.ok(bad.bad.some((g) => g.key === 'clash'));
 });
