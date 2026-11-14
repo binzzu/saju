@@ -18,6 +18,7 @@ const TOPICS = [
   { id: 'marriage', words: ['결혼', '배우자', '청혼', '프로포즈', '프러포즈', '신혼', '웨딩', '상견례'] },
   { id: 'contact', words: ['연락', '카톡', '답장', '문자', '밀당', '읽씹', '안읽씹', 'dm', '디엠'] },
   { id: 'date', words: ['소개팅', '데이트', '첫만남', '첫 만남', '미팅', '장소', '어디서', '어디 가', '선 보'] },
+  { id: 'intimacy', words: ['속궁합', '스킨십', '잠자리', '19금', '첫날밤'] },
   { id: 'compat', words: ['궁합', '그 사람', '그사람', '우리 커플', '우리 둘', '상대방', '잘 맞을', '잘 될까', '잘될까'] },
   { id: 'age', words: ['연상', '연하', '나이 차', '나이차', '동갑'] },
   { id: 'distance', words: ['장거리', '롱디', '해외', '군대', '유학'] },
@@ -234,6 +235,27 @@ const HANDLERS = {
     return {
       text: `헤어짐을 고민할 만큼 지쳤구나냥. 🫂\n\n🔮 **사주로 보면**\n${a.name}님은 ${p.cat} 타입이라, ${p.weak}\n그래서 지금의 피로감이 "관계의 문제"인지 "내 패턴"인지 구분해 보는 게 중요해요.${extra}\n\n💡 **해결책 — 이 질문에 답해 보세요**\n• 이 사람과 있을 때 나는 존중받고 있나요?\n• 같은 문제로 세 번 이상 싸웠고, 상대가 바뀔 의지가 없나요?\n• 1년 뒤에도 지금 같다면, 나는 괜찮을까요?\n두 개 이상 "아니요"라면 거리를 두고 생각할 때예요. 결정은 사주가 아니라 ${a.name}님이 하는 거다냥. 어느 쪽이든 응원할게요.`,
       expr: 'worry', chips: br ? ['요즘 자주 싸워요', '어떻게 먼저 사과하지?', '재회할 수 있을까?'] : ['요즘 자주 싸워요', '재회할 수 있을까?', '새 인연은 언제 와?'],
+    };
+  },
+
+  intimacy({ intimacy: it }) {
+    if (!it) {
+      return {
+        text: '속궁합이 궁금하구나냥. 😼\n\n🔮 **사주로 보면**\n속궁합은 두 사람의 사주를 함께 봐야 해서, 상대 정보가 필요해요. "궁합" 탭에서 상대를 정한 뒤 위의 **🔥 속궁합** 스위치를 눌러 보세요.\n\n💡 **해결책**\n• 궁합 탭 → 상대 정보 입력 또는 프리셋 선택\n• 🔥 속궁합으로 바꿔 보기 (두 사람 모두 만 19세 이상)',
+        expr: 'smug', chips: ['우리 커플 궁합은?', '이번 달 연애운은?'], action: 'compat',
+      };
+    }
+    if (it.blocked) {
+      return {
+        text: '속궁합 이야기는 두 사람 모두 **만 19세 이상**일 때만 할 수 있어요. 대신 마음이 얼마나 잘 맞는지는 **궁합**에서 함께 볼 수 있다냥!\n\n💡 **해결책**\n• 궁합 탭에서 두 사람의 성격·생활 궁합 보기\n• 좋아하는 마음은 대화와 함께하는 시간으로 천천히 키우기',
+        expr: 'smile', chips: ['우리 커플 궁합은?', '데이트 어디 갈까?'],
+      };
+    }
+    const thisYear = new Date().getFullYear();
+    const mn = (m) => (m.year !== thisYear ? `${m.year}년 ${m.month}월` : `${m.month}월`);
+    return {
+      text: `${it.b.name}님과의 속궁합이구나냥. 😼\n\n🔮 **사주로 보면**\n속궁합은 **${it.score}점 (${it.grade.title})**이에요. ${it.parts[1].short}, 그리고 ${it.parts[2].short}.\n${it.a.name}님은 **${it.styleA.type}**(${it.styleA.lead.label}), ${it.b.name}님은 **${it.styleB.type}**(${it.styleB.lead.label})이에요. ${it.styleA.type === it.styleB.type ? `둘 다 "${it.styleA.like}"를 좋아하는 닮은꼴이에요.` : `좋아하는 방식이 "${it.styleA.like}" / "${it.styleB.like}"로 조금 달라요.`}\n설렘 지수가 높은 달은 **${it.hot.map(mn).join('**, **')}**이에요.\n\n💡 **해결책**\n• ${it.tips[0]}\n• ${it.tips[it.tips.length - 1]}\n• 분위기는 ${it.mood.light}, ${josa(it.mood.scent, '으로', '로')}\n• 무엇보다 서로의 속도와 "싫어"를 존중하기`,
+      expr: 'smug', chips: ['우리 커플 궁합은?', '요즘 자주 싸워요', '이번 달 연애운은?'],
     };
   },
 

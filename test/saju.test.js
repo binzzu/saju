@@ -9,6 +9,7 @@ import { SYSTEM_PROMPT, contextBlock } from '../public/js/persona.js';
 import { analyzeCompat } from '../public/js/compat.js';
 import { analyzeBreakup, periodRisk, summaryBreakupForAI } from '../public/js/breakup.js';
 import { analyzeReunion, periodReunion, summaryReunionForAI } from '../public/js/reunion.js';
+import { analyzeIntimacy, ageOf, summaryIntimacyForAI } from '../public/js/intimacy.js';
 import { createCounselor, detectTopic } from '../public/js/counsel.js';
 import { josa, renderRich } from '../public/js/text.js';
 import {
@@ -273,4 +274,34 @@ test('재회운: 배우자 자리와 합이 드는 달은 재회 기운이 높�
   assert.ok(good.score > bad.score);
   assert.ok(good.good.some((g) => g.key === 'harmony'));
   assert.ok(bad.bad.some((g) => g.key === 'clash'));
+});
+
+test('속궁합: 다섯 항목 100점 만점, 스타일·달·분위기 처방이 만들어진다', () => {
+  const a = analyzePerson(minji);
+  const b = analyzePerson(junho);
+  const r = analyzeIntimacy(a, b, Date.UTC(2026, 10, 14));
+  assert.equal(r.blocked, false);
+  assert.equal(r.parts.reduce((s, p) => s + p.max, 0), 100);
+  assert.ok(r.score >= 40 && r.score <= 99);
+  assert.ok(r.styleA.type.endsWith('형') && r.styleB.type.endsWith('형'));
+  assert.ok(['리드형', '맞춤형', '유연형'].includes(r.styleA.lead.label));
+  assert.equal(r.months.length, 12);
+  assert.equal(r.hot.length, 2);
+  assert.ok(r.mood.light && r.mood.scent);
+  assert.ok(r.tips.length >= 3);
+  assert.match(summaryIntimacyForAI(r), /속궁합/);
+  assert.match(detectTopic('우리 속궁합 어때?'), /intimacy/);
+});
+
+test('속궁합: 두 사람 중 한 명이라도 만 19세 미만이면 결과를 만들지 않는다', () => {
+  const now = Date.UTC(2026, 10, 14);
+  const mk = (y, m, d) => analyzePerson({ name: '가', gender: 'M', calendar: 'solar', year: y, month: m, day: d, hour: 12, minute: 0, timeKnown: true });
+  const a = analyzePerson(minji);
+  assert.equal(ageOf(mk(2007, 11, 14), now), 19);
+  assert.equal(ageOf(mk(2007, 11, 15), now), 18);
+  const minor = analyzeIntimacy(a, mk(2007, 11, 15), now);
+  assert.equal(minor.blocked, true);
+  assert.equal(minor.parts, undefined);
+  assert.equal(analyzeIntimacy(a, mk(2007, 11, 14), now).blocked, false);
+  assert.equal(summaryIntimacyForAI(minor), '');
 });

@@ -691,3 +691,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .tabs a { padding: 5px 6px; font-size: 12.5px; }
   .tabs { gap: 2px; padding: 3px; }
 }
+
+/* ───────── 속궁합 ───────── */
+#intimacy-result { scroll-margin-top: 64px; }
+.part .meter--hot > span { background: linear-gradient(90deg, var(--blush), #F0524F); }
+.styles { display: grid; gap: 12px; }
+.style { padding: 12px 14px; border: 2.5px solid var(--ink); border-radius: 14px; background: var(--paper); box-shadow: 0 3px 0 var(--ink); }
+.style p { margin: 0 0 6px; font-size: var(--s-2); }
+.style p:last-child { margin-bottom: 0; }
+.style__type { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: var(--s-3) !important; }
+.style__type b { font-family: var(--f-display); font-weight: 400; font-size: var(--s-4); color: #C2185B; }
+.style__type .tag { margin: 0; background: var(--talisman); }

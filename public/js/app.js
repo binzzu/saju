@@ -12,6 +12,7 @@ import { SYSTEM_PROMPT, contextBlock, todayKST } from './persona.js';
 import { HOUR_LABELS } from './saju.js';
 import { analyzeBreakup, summaryBreakupForAI } from './breakup.js';
 import { analyzeReunion, summaryReunionForAI } from './reunion.js';
+import { analyzeIntimacy, summaryIntimacyForAI } from './intimacy.js';
 import {
   PRESET_LIMIT, personKey, loadPresets, findPreset, upsertPreset, removePreset, restorePreset, shortBirth, sanitizePerson,
 } from './presets.js';
@@ -68,7 +69,16 @@ function resetMemo(which) {
   if (which === 'me') { delete memo.me; delete memo.fc; }
   if (which === 'partner') delete memo.partner;
   delete memo.compat;
+  delete memo.intimacy;
 }
+// 속궁합 (나 × 궁합 상대, 두 사람 모두 만 19세 이상일 때만 결과)
+function intimacy() {
+  const a = me(), b = partner();
+  if (!a || !b) return null;
+  if (!memo.intimacy) memo.intimacy = analyzeIntimacy(a, b);
+  return memo.intimacy;
+}
+const compatResultId = () => ((location.hash || '').slice(1) === 'intimacy' ? 'intimacy-result' : 'compat-result');
 
 // 지금 보는 사람을 바꾼다 (다른 사람이면 상담 기록은 새로 시작)
 function setMe(person) {
@@ -121,7 +131,7 @@ function breakup() {
   return memo.breakup;
 }
 
-const counselor = createCounselor(() => ({ a: me(), fc: forecast(), compat: compat(), breakup: breakup(), reunion: reunion() }));
+const counselor = createCounselor(() => ({ a: me(), fc: forecast(), compat: compat(), breakup: breakup(), reunion: reunion(), intimacy: intimacy() }));
 
 /* ───────────── 웹툰 조각 ───────────── */
 
@@ -722,22 +732,96 @@ function compatResultHtml(c) {
       <span class="rx__stamp" aria-hidden="true">緣</span>
     </div></section>`;
   h += talk('myo', 'smile', p('궁합은 정해진 답이 아니라 서로를 이해하는 힌트야. 더 궁금한 건 상담실로 와라냥.'), { scene: 'night' });
-  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 궁합으로 상담하기</a><button class="btn btn--lilac" type="button" data-action="new-partner">다른 사람과 궁합 보기</button><button class="btn" type="button" data-action="share-compat">궁합 공유하기</button><button class="btn" type="button" data-action="breakup-from-compat">💔 이 커플 이별수 보기</button>${state.me && state.me.status === 'after' ? '<button class="btn" type="button" data-action="reunion-from-compat">💞 이 사람과 재회운 보기</button>' : ''}</div>`;
+  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 궁합으로 상담하기</a><button class="btn btn--lilac" type="button" data-action="new-partner">다른 사람과 궁합 보기</button><button class="btn" type="button" data-action="share-compat">궁합 공유하기</button><a class="btn" href="#intimacy">🔥 속궁합도 보기</a><button class="btn" type="button" data-action="breakup-from-compat">💔 이 커플 이별수 보기</button>${state.me && state.me.status === 'after' ? '<button class="btn" type="button" data-action="reunion-from-compat">💞 이 사람과 재회운 보기</button>' : ''}</div>`;
   return h;
 }
 
-function viewCompat() {
+function viewCompat(mode = 'compat') {
   const a = me();
+  const sw = switchNav('궁합 보기 선택', [['compat', '💞 궁합'], ['intimacy', '🔥 속궁합']], mode);
   if (!a) {
-    return talk('coco', 'worry', p('궁합을 보려면 먼저 <strong>내 사주</strong>부터 알려 줘야 해요!'), { side: 'right', scene: 'pink' })
+    return sw + talk('coco', 'worry', p(`${mode === 'intimacy' ? '속궁합' : '궁합'}을 보려면 먼저 <strong>내 사주</strong>부터 알려 줘야 해요!`), { side: 'right', scene: 'pink' })
       + `<div class="actions"><a class="btn btn--pink" href="#home">내 정보 입력하러 가기</a></div>`;
   }
-  let h = '';
-  h += talk('myo', 'smug', p(`${esc(a.name)}님, 궁합을 볼 상대가 있다고? 그 사람 정보를 부적에 적어 줘냥.`) + p('상대의 태어난 시간을 몰라도 괜찮아.'), { scene: 'lilac' });
+  let h = sw;
+  h += mode === 'intimacy'
+    ? talk('myo', 'smug', p(`${esc(a.name)}님, 어른들의 궁합 <strong>속궁합</strong>이 궁금하다고? 🔥`) + p('노골적인 이야기는 안 해. 두 사람의 끌림, 스킨십 속도와 온도, 어떤 분위기에서 마음이 열리는지 볼 거야. 두 사람 모두 <strong>만 19세 이상</strong>이어야 볼 수 있어냥.'), { scene: 'night' })
+    : talk('myo', 'smug', p(`${esc(a.name)}님, 궁합을 볼 상대가 있다고? 그 사람 정보를 부적에 적어 줘냥.`) + p('상대의 태어난 시간을 몰라도 괜찮아.'), { scene: 'lilac' });
   h += partnerPresets();
   h += talisman('partner', state.partner);
-  const c = compat();
-  if (c) h += `<div id="compat-result">${compatResultHtml(c)}</div>`;
+  if (mode === 'intimacy') {
+    const r = intimacy();
+    if (r) h += `<div id="intimacy-result">${intimacyResultHtml(r)}</div>`;
+  } else {
+    const c = compat();
+    if (c) h += `<div id="compat-result">${compatResultHtml(c)}</div>`;
+  }
+  return h;
+}
+
+function intimacyMonths(r) {
+  const hotSet = new Set(r.hot.map((m) => `${m.year}-${m.month}`));
+  const restKey = `${r.rest.year}-${r.rest.month}`;
+  const items = r.months.map((m) => {
+    const k = `${m.year}-${m.month}`;
+    const cls = hotSet.has(k) ? 'is-best' : k === restKey ? 'is-worst' : '';
+    return `<li class="month ${cls}">
+      <div class="month__bar" style="height:${Math.max(8, Math.round(8 + ((m.score - 30) / 68) * 92))}%">${hotSet.has(k) ? '<span class="month__heart">🔥</span>' : ''}</div>
+      <div class="month__label">${m.month === 1 ? `${String(m.year).slice(2)}.` : ''}${m.month}월<span class="month__score">${m.score}</span></div>
+    </li>`;
+  }).join('');
+  const sr = r.months.map((m) => `${m.year}년 ${m.month}월 ${m.score}`).join(', ');
+  return `<p class="sr">월별 설렘 지수: ${sr}</p><ul class="months" aria-hidden="true">${items}</ul>
+    <p class="legend"><span><i style="background:var(--blush)"></i>설렘 TOP 2</span><span><i style="background:var(--lilac)"></i>보통</span><span><i style="background:#D8D2E4"></i>쉬어 가기</span></p>`;
+}
+
+function intimacyResultHtml(r) {
+  if (r.blocked) {
+    return talk('coco', 'worry', p('앗, <strong>속궁합</strong>은 두 사람 모두 <strong>만 19세 이상</strong>일 때만 볼 수 있어요.') + p(`${r.minors.map((n) => `${esc(n)}님`).join(', ')}의 생일로는 아직 볼 수 없어요. 대신 💞 궁합에서 두 사람이 얼마나 잘 맞는지 볼 수 있어요!`), { side: 'right', scene: 'pink' })
+      + '<div class="actions"><a class="btn btn--pink" href="#compat">💞 궁합 보러 가기</a></div>';
+  }
+  const A = esc(r.a.name), B = esc(r.b.name);
+  const base = new Date().getFullYear();
+  const side = (x) => `<div class="vs__side"><div class="vs__emoji" aria-hidden="true">${DAY_MASTERS[x.dm].emoji}</div>
+    <div class="tile el-${x.dmEl}"><span class="hanja">${STEMS[x.dm]}</span><small>${STEMS_KO[x.dm]}·${ELEMENT_KO[x.dmEl]}</small></div>
+    <div class="vs__name">${esc(x.name)}</div><div class="vs__cat">${DAY_MASTERS[x.dm].cat}</div></div>`;
+  const styleCard = (x, st) => `<div class="style">
+      <p class="style__type">${st.emoji} ${esc(x.name)}님 <b>${st.type}</b><span class="tag">${st.lead.label}</span></p>
+      <p>${st.text}</p>
+      <p class="note">💗 좋아하는 방식: ${st.like}<br>🙊 조심: ${st.care}<br>🎛️ ${st.lead.text}</p>
+    </div>`;
+  let h = '';
+  h += episode('속궁합편', `${A} × ${B}`);
+  h += talk('myo', 'smug', p(`${A}님과 ${B}님, 둘만 있을 때의 케미를 살짝 들여다볼게냥. 😼`), { scene: 'night' });
+  h += info(`<div class="vs">${side(r.a)}<div class="vs__x" aria-hidden="true">🔥</div>${side(r.b)}</div>`, 'lilac');
+  h += talk('coco', 'love', p('히익… 결과 나왔어요! (귀까지 빨개짐)'), { side: 'right', scene: 'pink', sfx: '두근' });
+  h += `<section class="panel scene-speed"><div class="score">${riskHeart(r.score, { label: '속궁합', color: '#F0524F', seam: 'none' })}
+      <p class="score__grade">${r.grade.emoji} ${r.grade.title}</p><p class="score__line">${r.grade.line}</p></div></section>`;
+  h += info(`<h3>속궁합 상세 풀이</h3><ul class="parts">${r.parts.map((pt) => `<li class="part">
+      <div class="part__head"><h4>${pt.icon} ${pt.label}</h4><span class="part__pts">${pt.points} / ${pt.max}</span></div>
+      <div class="meter meter--hot"><span style="width:${(pt.points / pt.max) * 100}%"></span></div>
+      ${pt.detail ? `<p class="part__detail">${esc(pt.detail)}</p>` : ''}
+      <p class="part__short">${esc(pt.short)}</p><p class="part__text">${esc(pt.text)}</p>
+    </li>`).join('')}</ul>`);
+  h += info(`<h3>두 사람의 애정 표현 스타일</h3><div class="styles">${styleCard(r.a, r.styleA)}${styleCard(r.b, r.styleB)}</div>`, 'pink');
+  h += talk('coco', 'love', `<p>두 사람의 좋은 점!</p><ul class="ticks">${r.strengths.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, { side: 'right', scene: 'mint' });
+  h += talk('myo', 'think', `<p>이건 맞춰 가야 한다냥.</p><ul class="ticks">${r.cautions.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, { scene: 'lilac' });
+  h += info(`<h3>🔥 설렘 지수가 높은 달</h3>${intimacyMonths(r)}<ul class="ticks ticks--plain">${r.hot.map((m) => `<li><b>🔥 ${monthName(m, base)}</b> — ${esc(m.why.slice(0, 2).join(' / ') || '두 사람의 연애운이 함께 오르는 달')}. 특별한 데이트는 이때!</li>`).join('')}<li><b>🫖 ${monthName(r.rest, base)}</b> — 서로 피곤하기 쉬운 달이에요. 무리한 이벤트보다 편안한 휴식 데이트로.</li></ul>`);
+  h += info(`<h3>💞 더 가까워지는 법</h3><ul class="ticks">${r.tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, 'mint');
+  h += `<section class="panel"><div class="rx">
+      <div class="rx__head"><h3 class="lead-em" style="font-size:var(--s-5)">무드 처방전</h3><span>${A} ♥ ${B} · ${ELEMENT_KO[r.moodEl]} 기운 채우기</span></div>
+      <dl class="luck">
+        <div class="luck__row"><dt>조명</dt><dd>${r.mood.light}</dd></div>
+        <div class="luck__row"><dt>향</dt><dd>${r.mood.scent}</dd></div>
+        <div class="luck__row"><dt>음악</dt><dd>${r.mood.music}</dd></div>
+        <div class="luck__row"><dt>데이트</dt><dd>${r.mood.place}</dd></div>
+        <div class="luck__row"><dt>컬러</dt><dd>${r.mood.color}</dd></div>
+      </dl>
+      <span class="rx__stamp" aria-hidden="true">緣</span>
+    </div></section>`;
+  h += talk('myo', 'smile', p('속궁합 점수보다 중요한 건 서로의 속도를 존중하는 마음이야.') + p('좋은 건 좋다고, 싫은 건 싫다고 편하게 말할 수 있는 사이가 최고의 속궁합이다냥.'), { scene: 'night' });
+  h += info('<p class="safety">💡 <b>속궁합의 기본은 동의와 존중이에요.</b> 싫다는 말은 언제든 할 수 있고, 들은 쪽은 그 뜻을 존중해야 해요. 서로의 건강과 안전도 함께 챙겨 주세요.</p>', 'paper');
+  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 결과로 상담하기</a><a class="btn btn--lilac" href="#compat">💞 일반 궁합 보기</a><button class="btn" type="button" data-action="share-intimacy">결과 공유하기</button></div>`;
   return h;
 }
 
@@ -775,11 +859,11 @@ const PAIR_MODE = {
 };
 const pairMode = () => ((location.hash || '').slice(1) === 'reunion' ? 'reunion' : 'breakup');
 
+function switchNav(label, items, cur) {
+  return `<nav class="modes" aria-label="${label}">${items.map(([key, text]) => `<a href="#${key}" class="${key === cur ? 'is-on' : ''}" ${key === cur ? 'aria-current="page"' : ''}>${text}</a>`).join('')}</nav>`;
+}
 function modeSwitch(mode) {
-  return `<nav class="modes" aria-label="이별·재회 보기 선택">
-    <a href="#breakup" class="${mode === 'breakup' ? 'is-on' : ''}" ${mode === 'breakup' ? 'aria-current="page"' : ''}>💔 이별수</a>
-    <a href="#reunion" class="${mode === 'reunion' ? 'is-on' : ''}" ${mode === 'reunion' ? 'aria-current="page"' : ''}>💞 재회운</a>
-  </nav>`;
+  return switchNav('이별·재회 보기 선택', [['breakup', '💔 이별수'], ['reunion', '💞 재회운']], mode);
 }
 
 function pairPicker(mode = 'breakup') {
@@ -805,7 +889,7 @@ function pairPicker(mode = 'breakup') {
 function riskHeart(risk, { label = '이별수', color = '#7E63C9', seam = 'crack' } = {}) {
   const top = 12 + (100 - risk) * 0.84;
   const heart = 'M60 102 C 20 76, 4 54, 4 32 C 4 14, 18 4, 32 4 C 44 4, 54 11, 60 22 C 66 11, 76 4, 88 4 C 102 4, 116 14, 116 32 C 116 54, 100 76, 60 102 Z';
-  const line = seam === 'crack'
+  const line = seam === 'none' ? '' : seam === 'crack'
     ? '<path d="M60 22 L54 38 L64 50 L55 64 L63 78 L58 92" fill="none" stroke="#2A1B3D" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>'
     : `<path d="M60 22 L56 40 L62 56 L57 74 L60 96" fill="none" stroke="#2A1B3D" stroke-width="1.6" stroke-dasharray="3 3"/>
        ${[30, 44, 58, 72, 86].map((y) => `<path d="M${52} ${y - 3} L${66} ${y + 3}" stroke="#2A1B3D" stroke-width="2.4" stroke-linecap="round"/>`).join('')}`;
@@ -1161,8 +1245,9 @@ function showLive(text) {
 }
 
 async function askAI() {
-  const br = breakup(), ru = reunion();
-  const context = summaryForAI(me(), forecast(), compat()) + (br ? `\n${summaryBreakupForAI(br)}` : '') + (ru ? `\n${summaryReunionForAI(ru)}` : '');
+  const br = breakup(), ru = reunion(), it = intimacy();
+  const context = summaryForAI(me(), forecast(), compat()) + (br ? `\n${summaryBreakupForAI(br)}` : '') + (ru ? `\n${summaryReunionForAI(ru)}` : '')
+    + (it && !it.blocked ? `\n${summaryIntimacyForAI(it)}` : '');
   const history = chatHistory();
   const text = state.ai === 'artifact' ? await askArtifact(history, context) : await askServer(history, context);
   if (!text || !text.trim()) return null;
@@ -1223,10 +1308,11 @@ const app = document.getElementById('app');
 
 function render() {
   const route = (location.hash || '#home').slice(1);
-  const tab = route === 'home' || route === 'start' ? 'start' : route === 'reunion' ? 'breakup' : route;
+  const tab = route === 'home' || route === 'start' ? 'start' : route === 'reunion' ? 'breakup' : route === 'intimacy' ? 'compat' : route;
   let html;
   if (route === 'reading') html = viewReading();
-  else if (route === 'compat') html = viewCompat();
+  else if (route === 'compat') html = viewCompat('compat');
+  else if (route === 'intimacy') html = viewCompat('intimacy');
   else if (route === 'chat') html = viewChat();
   else if (route === 'breakup') html = viewBreakup('breakup');
   else if (route === 'reunion') html = viewBreakup('reunion');
@@ -1237,14 +1323,14 @@ function render() {
     else t.removeAttribute('aria-current');
   });
   document.title = {
-    reading: '내 연애 사주 — 묘연의 연애사주', compat: '궁합 — 묘연의 연애사주', chat: '상담실 — 묘연의 연애사주', breakup: '이별수 — 묘연의 연애사주', reunion: '재회운 — 묘연의 연애사주',
+    reading: '내 연애 사주 — 묘연의 연애사주', compat: '궁합 — 묘연의 연애사주', chat: '상담실 — 묘연의 연애사주', breakup: '이별수 — 묘연의 연애사주', reunion: '재회운 — 묘연의 연애사주', intimacy: '속궁합 — 묘연의 연애사주',
   }[route] || '묘연의 연애사주 — 고양이 점술사가 웹툰으로 풀어 주는 연애 사주·궁합';
   if (route === 'chat') scrollChat();
   if (route === 'start') {
     document.getElementById('start')?.scrollIntoView({ block: 'start' });
   } else if (pendingScroll && document.getElementById(pendingScroll)) {
     document.getElementById(pendingScroll).scrollIntoView({ block: 'start' });
-    if (['compat-result', 'breakup-result', 'reunion-result'].includes(pendingScroll)) animateScore();
+    if (['compat-result', 'breakup-result', 'reunion-result', 'intimacy-result'].includes(pendingScroll)) animateScore();
   } else {
     window.scrollTo(0, 0);
   }
@@ -1312,7 +1398,7 @@ app.addEventListener('submit', (ev) => {
     state.partner = res.person;
     resetMemo('partner');
     store.set('partner', state.partner);
-    stampThen(form, () => { pendingScroll = 'compat-result'; render(); });
+    stampThen(form, () => { pendingScroll = compatResultId(); render(); });
   }
 });
 
@@ -1365,7 +1451,7 @@ app.addEventListener('click', (ev) => {
     state.partner = { ...x.person };
     resetMemo('partner');
     store.set('partner', state.partner);
-    pendingScroll = 'compat-result';
+    pendingScroll = compatResultId();
     render();
     return;
   }
@@ -1415,6 +1501,7 @@ app.addEventListener('click', (ev) => {
   if (action === 'pair-again') { pendingScroll = 'pairbox'; render(); return; }
   if (action === 'share-breakup') { shareBreakup(); return; }
   if (action === 'share-reunion') { shareReunion(); return; }
+  if (action === 'share-intimacy') { shareIntimacy(); return; }
   if (action === 'reunion-from-compat') {
     if (!state.me || !state.partner) return;
     state.pair = { a: { ...state.me }, b: { ...state.partner }, done: true };
@@ -1537,6 +1624,12 @@ function shareReunion() {
   if (!r) return;
   const b0 = r.best[0];
   share(`🐾 묘연의 연애사주\n${r.a.name} → ${r.b.name} 재회운 ${r.score}점, ${r.grade.title} ${r.grade.emoji}\n다시 닿기 좋은 때: ${b0.year}년 ${b0.month}월 · ${r.b.name}님은 "${r.mind.type}"`);
+}
+
+function shareIntimacy() {
+  const r = intimacy();
+  if (!r || r.blocked) return;
+  share(`🐾 묘연의 연애사주\n${r.a.name} ♥ ${r.b.name} 속궁합 ${r.score}점, ${r.grade.title} ${r.grade.emoji}\n"${r.grade.line}"`);
 }
 
 function shareCompat() {
