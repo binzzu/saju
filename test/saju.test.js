@@ -7,6 +7,7 @@ import { lunarToSolar, solarToLunar, lunarMonthInfo } from '../public/js/lunar.j
 import { analyzePerson, buildForecast, summaryForAI, computeDaewoon, dailyLove } from '../public/js/reading.js';
 import { SYSTEM_PROMPT, contextBlock } from '../public/js/persona.js';
 import { analyzeCompat } from '../public/js/compat.js';
+import { analyzeBreakup, periodRisk, summaryBreakupForAI } from '../public/js/breakup.js';
 import { createCounselor, detectTopic } from '../public/js/counsel.js';
 import { josa, renderRich } from '../public/js/text.js';
 import {
@@ -190,4 +191,50 @@ test('프리셋: 깨진 저장값은 걸러낸다', () => {
   assert.equal(list.length, 1);
   assert.equal(personKey(list[0].person), personKey(minji));
   assert.deepEqual(loadPresets('oops'), []);
+});
+
+test('이별수: 점수·요인·패턴·시기·해결책이 모두 만들어진다', () => {
+  const a = analyzePerson(minji);
+  const b = analyzePerson(junho);
+  const r = analyzeBreakup(a, b, Date.UTC(2026, 10, 14));
+  assert.ok(r.risk >= 5 && r.risk <= 95);
+  assert.ok(r.grade.title.startsWith('이별수'));
+  assert.ok(r.couple.some((f) => f.label === '배우자 자리 궁합'));
+  assert.ok(r.couple.some((f) => f.label === '마음의 주도권'));
+  assert.ok(r.pattern.title && r.pattern.stop && r.pattern.signs.length === 3);
+  assert.equal(r.years.length, 5);
+  assert.equal(r.months.length, 12);
+  assert.ok(r.repair.length === 2);
+  // 위험한 달은 날짜순
+  const idx = r.danger.map((d) => r.months.indexOf(d));
+  assert.deepEqual(idx, [...idx].sort((x, y) => x - y));
+  assert.ok(r.rules.length >= 3 && r.forA.length >= 2 && r.forB.length >= 2 && r.crisis.length >= 2);
+  assert.match(summaryBreakupForAI(r), /이별수 지수/);
+});
+
+test('이별수: 배우자 자리 충은 위험, 육합은 보호 요인', () => {
+  const base = { gender: 'F', calendar: 'solar', hour: 12, minute: 0, timeKnown: true };
+  // 일지가 子(0)인 날과 午(6)인 날 → 충, 子와 丑(1) → 육합
+  const find = (branch, from) => {
+    for (let d = 0; d < 60; d++) {
+      const dt = new Date(from + d * 86400000);
+      const p = { ...base, name: `p${branch}`, year: dt.getUTCFullYear(), month: dt.getUTCMonth() + 1, day: dt.getUTCDate() };
+      const x = analyzePerson(p);
+      if (x.dayBranch === branch) return x;
+    }
+    return null;
+  };
+  const t0 = Date.UTC(1995, 4, 1);
+  const zi = find(0, t0), wu = { ...find(6, t0) }, chou = find(1, t0);
+  const clash = analyzeBreakup(zi, { ...wu, gender: 'M', name: '오' });
+  const harmony = analyzeBreakup(zi, { ...chou, gender: 'M', name: '축' });
+  assert.equal(clash.couple[0].id, 'palace_clash');
+  assert.ok(clash.couple[0].pts > 0);
+  assert.equal(harmony.couple[0].id, 'palace_harmony');
+  assert.ok(harmony.couple[0].pts < 0);
+  // 시기: 두 사람 일지를 충하는 달은 위험이 높다
+  const r1 = periodRisk(zi, chou, 0, 6);  // 午: 子를 충
+  const r2 = periodRisk(zi, chou, 0, 1);  // 丑: 子와 육합
+  assert.ok(r1.risk > r2.risk);
+  assert.equal(r1.main.key, 'clash');
 });
