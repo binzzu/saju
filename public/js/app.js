@@ -13,6 +13,7 @@ import { HOUR_LABELS } from './saju.js';
 import { analyzeBreakup, summaryBreakupForAI } from './breakup.js';
 import { analyzeReunion, summaryReunionForAI } from './reunion.js';
 import { analyzeIntimacy, summaryIntimacyForAI } from './intimacy.js';
+import { dailyFortune, weekFortune, summaryDailyForAI } from './daily.js';
 import {
   PRESET_LIMIT, personKey, loadPresets, findPreset, upsertPreset, removePreset, restorePreset, shortBirth, sanitizePerson,
 } from './presets.js';
@@ -33,6 +34,7 @@ const state = {
   presets: loadPresets(store.get('presets')), // 프리셋(인연 수첩): 저장해 둔 사람들
   pair: loadPair(store.get('pair')),          // 이별수: 두 사람 A·B, 결과 보기를 눌렀는지
   pairEdit: null,                             // 'a' | 'b' — 직접 입력 신청서가 열린 칸
+  dayOffset: 0,                               // 오늘의 운세: 오늘로부터 며칠 뒤(음수면 전)
   ai: null, // null | 'server'(Node + API 키) | 'artifact'(Claude 아티팩트의 sample)
   sample: null,
   busy: false,
@@ -438,7 +440,8 @@ function openPreset(id) {
   const x = state.presets.find((it) => it.id === id);
   if (!x) return;
   if (!setMe({ ...x.person })) { toast('이 프리셋의 날짜를 읽을 수 없어요.'); return; }
-  if (location.hash === '#reading') render();
+  // 사주 풀이·오늘의 운세 화면에서는 그 화면 그대로 사람만 바꾼다
+  if (location.hash === '#reading' || location.hash === '#today') render();
   else location.hash = '#reading';
 }
 
@@ -476,7 +479,8 @@ function todayCard(a) {
         <p>${couple ? t.reason.couple : t.reason.solo}</p>
         <p class="note">💡 ${t.reason.tip}</p>
       </div>
-    </div>`, 'mint');
+    </div>
+    <div class="today__more"><a class="mini mini--pink" href="#today">☀️ 오늘의 운세 전체 보기</a></div>`, 'mint');
 }
 
 function daewoonList(dw) {
@@ -573,6 +577,7 @@ function viewReading() {
   const pr = a.profile;
   const baseYear = fc.current.sajuYear;
   let h = viewingBar(a);
+  h += readingSwitch('reading');
 
   // 1화
   h += episode('1화', '사주팔자 대공개');
@@ -686,6 +691,66 @@ function viewReading() {
   h += `<div class="actions"><a class="btn btn--pink" href="#compat">궁합 보러 가기</a><a class="btn btn--lilac" href="#chat">묘연에게 상담하기</a><button class="btn" type="button" data-action="share-reading">결과 공유하기</button></div>`;
   h += talk('myo', 'smile', p(`사주는 지도일 뿐, 길을 고르는 건 ${n}님이야. 언제든 놀러 와라냥.`), { scene: 'night' });
   h += `<div class="actions">${findPreset(state.presets, state.me) ? '' : '<button class="btn btn--pink" type="button" data-action="preset-save-current">📌 프리셋에 저장</button>'}<a class="btn btn--ghost" href="#start" style="color:#fff;border-color:#fff">🏠 처음으로 · 다른 사람 보기</a>${a.person.status === 'after' ? '<a class="btn btn--lilac" href="#reunion">💞 재회운 보러 가기</a>' : ''}</div>`;
+  return h;
+}
+
+/* ───────────── 화면: 오늘의 운세 ───────────── */
+
+function readingSwitch(mode) {
+  return switchNav('내 사주 보기 선택', [['reading', '📖 내 사주 풀이'], ['today', '☀️ 오늘의 운세']], mode);
+}
+
+const DAY_MIN = -7, DAY_MAX = 30;
+
+function viewToday() {
+  const a = me();
+  if (!a) {
+    return readingSwitch('today') + talk('coco', 'worry', p('오늘의 운세를 보려면 먼저 <strong>내 사주</strong>부터 알려 줘야 해요!'), { side: 'right', scene: 'pink' })
+      + '<div class="actions"><a class="btn btn--pink" href="#start">내 정보 입력하러 가기</a></div>';
+  }
+  const off = state.dayOffset;
+  const f = dailyFortune(a, Date.now(), off);
+  const n = esc(a.name);
+  const week = weekFortune(a, Date.now(), 0, 7);
+  const rel = { '-1': '어제', 0: '오늘', 1: '내일' }[off] || `${f.date.m}월 ${f.date.d}일`;
+  let h = viewingBar(a);
+  h += readingSwitch('today');
+  h += `<div class="daynav" id="daynav">
+    <button class="mini" type="button" data-day="${off - 1}" ${off <= DAY_MIN ? 'disabled' : ''} aria-label="하루 전">◀ 전날</button>
+    <div class="daynav__now"><b>${f.date.m}월 ${f.date.d}일(${f.date.wd})</b><small>${{ '-1': '어제 · ', 0: '오늘 · ', 1: '내일 · ' }[off] || ''}${f.pillar.hanja}일 · ${f.pillar.animal}의 날</small></div>
+    <button class="mini" type="button" data-day="${off + 1}" ${off >= DAY_MAX ? 'disabled' : ''} aria-label="하루 뒤">다음 날 ▶</button>
+  </div>
+  <ul class="week" aria-label="이번 주 총운">${week.map((w) => `<li><button type="button" class="week__day ${w.offset === off ? 'is-on' : ''} lv-${w.grade.key}" data-day="${w.offset}">
+    <span class="week__wd">${w.offset === 0 ? '오늘' : w.wd}</span><span class="week__emoji" aria-hidden="true">${w.grade.emoji}</span><b>${w.overall}</b><small>${w.m}/${w.d}</small></button></li>`).join('')}</ul>
+  ${off !== 0 ? '<div class="daynav__back"><button class="mini mini--pink" type="button" data-day="0">☀️ 오늘로 돌아가기</button></div>' : ''}`;
+
+  h += talk('myo', f.overall >= 72 ? 'sparkle' : f.overall >= 58 ? 'smile' : f.overall >= 45 ? 'think' : 'worry',
+    p(`${n}님의 ${rel}은 ${f.theme.emoji} <strong>${f.theme.word}</strong>의 날이다냥.`) + p(f.theme.line + '.'), { scene: 'night', caption: `${f.pillar.hanja}일 · 묘연의 일진 풀이` });
+  h += `<section class="panel scene-speed"><div class="score">${riskHeart(f.overall, { label: '총운', color: '#F7D54A', seam: 'none' })}
+      <p class="score__grade">${f.grade.emoji} ${f.grade.label}</p><p class="score__line">${f.theme.emoji} ${f.theme.word} · ${f.sub.emoji} ${f.sub.word}</p></div></section>`;
+  h += info(`<h3>분야별 운세</h3><ul class="cats">${f.cats.map((c) => `<li class="cat">
+      <div class="cat__head"><h4>${c.icon} ${c.label}</h4><span class="cat__grade">${c.grade.emoji} ${c.grade.label} · <b>${c.score}</b></span></div>
+      <div class="meter"><span style="width:${c.score}%"></span></div>
+      ${c.sub ? `<p class="cat__sub">${c.sub}</p>` : ''}<p class="cat__line">${esc(c.line)}</p>
+    </li>`).join('')}</ul>`);
+  h += info(`<h3>🌊 ${rel}의 흐름</h3><p>${esc(f.relText)}</p><p>오늘 기운의 아랫글자는 ${f.sub.emoji} <b>${f.sub.word}</b>: ${esc(f.sub.line)}.</p>${f.combo ? '<p>✨ 게다가 오늘의 천간이 내 일간과 <b>합</b>을 이뤄요. 마음먹은 일이 잘 맞물리는 날이에요.</p>' : ''}`, 'lilac');
+  h += info(`<h3>🕰️ 시간대별 운세</h3><ul class="blocks">${f.blocks.map((b) => `<li class="block ${b.key === f.bestBlock.key ? 'is-best' : b.key === f.careBlock.key ? 'is-care' : ''}">
+      <span class="block__label">${b.label}<small>${b.range}</small></span>
+      <div class="meter"><span style="width:${b.score}%"></span></div><b>${b.score}</b></li>`).join('')}</ul>
+    <p class="note">⭐ 가장 좋은 시간: <b>${f.bestHour.name}(${f.bestHour.range})</b> · ⚠️ 조심할 시간: <b>${f.worstHour.name}(${f.worstHour.range})</b></p>`);
+  h += info(`<h3>🍀 ${rel}의 행운</h3><dl class="luck">
+      <div class="luck__row"><dt>컬러</dt><dd><span class="swatches">${f.lucky.swatch.map((c) => `<span style="background:${c}"></span>`).join('')}</span>${f.lucky.color}</dd></div>
+      <div class="luck__row"><dt>숫자</dt><dd>${f.lucky.number}</dd></div>
+      <div class="luck__row"><dt>방향</dt><dd>${f.lucky.direction}</dd></div>
+      <div class="luck__row"><dt>시간</dt><dd>${f.lucky.time}</dd></div>
+      <div class="luck__row"><dt>아이템</dt><dd>${f.lucky.item}</dd></div>
+      <div class="luck__row"><dt>음식</dt><dd>${f.lucky.food}</dd></div>
+      <div class="luck__row"><dt>장소</dt><dd>${f.lucky.place}</dd></div>
+    </dl><p class="note">오늘 부족한 ${ELEMENT_KO[f.lucky.el]}(${ELEMENT_INFO[f.lucky.el].name}) 기운을 채워 주는 것들이에요.</p>`, 'mint');
+  h += info(`<div class="dolist"><div><h3>⭕ 하면 좋은 일</h3><ul class="ticks">${f.todo.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>
+    <div><h3>❌ 피할 일</h3><ul class="ticks ticks--x">${f.avoid.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div></div>`, 'yellow');
+  h += talk('coco', f.overall >= 58 ? 'happy' : 'wink', p(f.overall >= 72 ? `${rel}은 기운이 좋아요! 미뤄 둔 일 있으면 지금이에요!` : f.overall >= 58 ? `무난한 하루예요. ${f.lucky.color} 소품 하나로 기분 전환해 봐요!` : `조금 쉬어 가는 날이에요. ${f.bestBlock.label} 시간에 중요한 일만 끝내고 푹 쉬어요!`), { side: 'right', scene: 'pink' });
+  h += `<div class="actions"><a class="btn btn--pink" href="#chat">오늘 운세 상담하기</a><button class="btn" type="button" data-action="share-today">운세 공유하기</button><a class="btn btn--lilac" href="#reading">📖 내 사주 풀이 보기</a></div>`;
   return h;
 }
 
@@ -1247,7 +1312,7 @@ function showLive(text) {
 async function askAI() {
   const br = breakup(), ru = reunion(), it = intimacy();
   const context = summaryForAI(me(), forecast(), compat()) + (br ? `\n${summaryBreakupForAI(br)}` : '') + (ru ? `\n${summaryReunionForAI(ru)}` : '')
-    + (it && !it.blocked ? `\n${summaryIntimacyForAI(it)}` : '');
+    + (it && !it.blocked ? `\n${summaryIntimacyForAI(it)}` : '') + `\n${summaryDailyForAI(dailyFortune(me()))}`;
   const history = chatHistory();
   const text = state.ai === 'artifact' ? await askArtifact(history, context) : await askServer(history, context);
   if (!text || !text.trim()) return null;
@@ -1308,11 +1373,12 @@ const app = document.getElementById('app');
 
 function render() {
   const route = (location.hash || '#home').slice(1);
-  const tab = route === 'home' || route === 'start' ? 'start' : route === 'reunion' ? 'breakup' : route === 'intimacy' ? 'compat' : route;
+  const tab = route === 'home' || route === 'start' ? 'start' : route === 'reunion' ? 'breakup' : route === 'intimacy' ? 'compat' : route === 'today' ? 'reading' : route;
   let html;
   if (route === 'reading') html = viewReading();
   else if (route === 'compat') html = viewCompat('compat');
   else if (route === 'intimacy') html = viewCompat('intimacy');
+  else if (route === 'today') html = viewToday();
   else if (route === 'chat') html = viewChat();
   else if (route === 'breakup') html = viewBreakup('breakup');
   else if (route === 'reunion') html = viewBreakup('reunion');
@@ -1323,7 +1389,7 @@ function render() {
     else t.removeAttribute('aria-current');
   });
   document.title = {
-    reading: '내 연애 사주 — 묘연의 연애사주', compat: '궁합 — 묘연의 연애사주', chat: '상담실 — 묘연의 연애사주', breakup: '이별수 — 묘연의 연애사주', reunion: '재회운 — 묘연의 연애사주', intimacy: '속궁합 — 묘연의 연애사주',
+    reading: '내 연애 사주 — 묘연의 연애사주', compat: '궁합 — 묘연의 연애사주', chat: '상담실 — 묘연의 연애사주', breakup: '이별수 — 묘연의 연애사주', reunion: '재회운 — 묘연의 연애사주', intimacy: '속궁합 — 묘연의 연애사주', today: '오늘의 운세 — 묘연의 연애사주',
   }[route] || '묘연의 연애사주 — 고양이 점술사가 웹툰으로 풀어 주는 연애 사주·궁합';
   if (route === 'chat') scrollChat();
   if (route === 'start') {
@@ -1455,6 +1521,13 @@ app.addEventListener('click', (ev) => {
     render();
     return;
   }
+  const dayBtn = ev.target.closest('[data-day]');
+  if (dayBtn) {
+    state.dayOffset = Math.max(DAY_MIN, Math.min(DAY_MAX, Number(dayBtn.dataset.day) || 0));
+    pendingScroll = 'daynav';
+    render();
+    return;
+  }
   const pairPick = ev.target.closest('[data-pair-pick]');
   if (pairPick) {
     const c = pairCandidates().find((x) => x.id === pairPick.dataset.cand);
@@ -1502,6 +1575,7 @@ app.addEventListener('click', (ev) => {
   if (action === 'share-breakup') { shareBreakup(); return; }
   if (action === 'share-reunion') { shareReunion(); return; }
   if (action === 'share-intimacy') { shareIntimacy(); return; }
+  if (action === 'share-today') { shareToday(); return; }
   if (action === 'reunion-from-compat') {
     if (!state.me || !state.partner) return;
     state.pair = { a: { ...state.me }, b: { ...state.partner }, done: true };
@@ -1624,6 +1698,13 @@ function shareReunion() {
   if (!r) return;
   const b0 = r.best[0];
   share(`🐾 묘연의 연애사주\n${r.a.name} → ${r.b.name} 재회운 ${r.score}점, ${r.grade.title} ${r.grade.emoji}\n다시 닿기 좋은 때: ${b0.year}년 ${b0.month}월 · ${r.b.name}님은 "${r.mind.type}"`);
+}
+
+function shareToday() {
+  const a = me();
+  if (!a) return;
+  const f = dailyFortune(a, Date.now(), state.dayOffset);
+  share(`🐾 묘연의 연애사주\n${a.name}님의 ${f.date.m}월 ${f.date.d}일 운세: 총운 ${f.overall}점 ${f.grade.emoji} ${f.grade.label}\n${f.theme.emoji} ${f.theme.word}의 날 — ${f.theme.line}\n행운 컬러 ${f.lucky.color} · 좋은 시간 ${f.bestBlock.label}`);
 }
 
 function shareIntimacy() {

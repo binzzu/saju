@@ -10,6 +10,7 @@ import { analyzeCompat } from '../public/js/compat.js';
 import { analyzeBreakup, periodRisk, summaryBreakupForAI } from '../public/js/breakup.js';
 import { analyzeReunion, periodReunion, summaryReunionForAI } from '../public/js/reunion.js';
 import { analyzeIntimacy, ageOf, summaryIntimacyForAI } from '../public/js/intimacy.js';
+import { dailyFortune, weekFortune, summaryDailyForAI } from '../public/js/daily.js';
 import { createCounselor, detectTopic } from '../public/js/counsel.js';
 import { josa, renderRich } from '../public/js/text.js';
 import {
@@ -304,4 +305,25 @@ test('속궁합: 두 사람 중 한 명이라도 만 19세 미만이면 결과�
   assert.equal(minor.parts, undefined);
   assert.equal(analyzeIntimacy(a, mk(2007, 11, 14), now).blocked, false);
   assert.equal(summaryIntimacyForAI(minor), '');
+});
+
+test('오늘의 운세: 그날 일진으로 총운·분야별 운세·시간대·행운이 만들어진다', () => {
+  const a = analyzePerson(minji);
+  const now = Date.UTC(2026, 10, 13, 3); // 2026-11-13 (KST 12시) → 辛卯일
+  const f = dailyFortune(a, now);
+  assert.equal(f.pillar.hanja, '辛卯');
+  assert.equal(f.date.wd, '금');
+  assert.ok(f.overall >= 12 && f.overall <= 98);
+  assert.deepEqual(f.cats.map((c) => c.key), ['love', 'money', 'work', 'health', 'social']);
+  // 연애운은 기존 "오늘의 연애운"과 같은 값
+  assert.equal(f.cats[0].score, dailyLove(a, now).score);
+  assert.equal(f.blocks.length, 4);
+  assert.ok(f.lucky.color && f.lucky.time && f.todo.length >= 2 && f.avoid.length >= 2);
+  // 내일 = 하루 뒤 일진
+  assert.equal(dailyFortune(a, now, 1).pillar.hanja, '壬辰');
+  const w = weekFortune(a, now);
+  assert.equal(w.length, 7);
+  assert.equal(w[0].overall, f.overall);
+  assert.match(summaryDailyForAI(f), /총운/);
+  assert.equal(detectTopic('오늘 운세 어때?'), 'today');
 });

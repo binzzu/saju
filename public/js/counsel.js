@@ -2,6 +2,7 @@
 import { dayPillarOf, ELEMENT_KO, STEMS, BRANCHES, branchRelation } from './saju.js';
 import { DAY_MASTERS, ELEMENT_INFO, CHARMS, periodLove, STATUS_LABEL } from './reading.js';
 import { WEEKDAYS, josa } from './text.js';
+import { dailyFortune } from './daily.js';
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
@@ -25,6 +26,7 @@ const TOPICS = [
   { id: 'ideal', words: ['이상형', '어떤 사람', '어떤 스타일', '어떤 타입', '잘 맞는 사람', '맞는 사람'] },
   { id: 'charm', words: ['매력', '인기', '어필', '외모', '스타일링', '패션', '첫인상', '꾸미'] },
   { id: 'lucky', words: ['행운', '개운', '컬러', '색깔', '아이템', '숫자', '방향', '부적', '향수'] },
+  { id: 'today', words: ['오늘', '내일', '하루', '일진'] },
   { id: 'period', words: ['올해', '내년', '이번 달', '이번달', '다음 달', '다음달', '연애운', '운세', '월별'] },
   { id: 'self', words: ['문제점', '단점', '연애 스타일', '왜 연애', '왜 안', '모솔', '연애를 못', '연애 못', '나는 어떤', '내 성격'] },
   { id: 'timing', words: ['언제', '시기', '생길', '만날', '인연', '솔로 탈출', '애인', '남친', '여친', '남자친구', '여자친구'] },
@@ -383,6 +385,19 @@ const HANDLERS = {
     return {
       text: `${a.name}님 맞춤 개운법이다냥! 🍀\n\n🔮 **사주로 보면**\n${a.name}님에게 필요한 기운은 **${ELEMENT_KO[a.lucky]}(${ELEMENT_INFO[a.lucky].name})**${josa(ELEMENT_INFO[a.lucky].name, '이에요', '예요').slice(ELEMENT_INFO[a.lucky].name.length)}. ${ELEMENT_INFO[a.lucky].theme}의 기운을 채우면 연애운이 부드럽게 열려요.\n\n💡 **해결책**\n• 컬러: **${l.color}**\n• 숫자: ${l.numbers} / 방향: ${l.direction}\n• 아이템: ${l.items.join(', ')}\n• 음식: ${l.food}\n• 행동: ${l.action}`,
       expr: 'smug', chips: ['데이트 장소 추천', '이번 달 연애운은?'],
+    };
+  },
+
+  today({ a, text }) {
+    const tomorrow = text.includes('내일');
+    const f = dailyFortune(a, Date.now(), tomorrow ? 1 : 0);
+    const when = tomorrow ? '내일' : '오늘';
+    const top = [...f.cats].sort((x, y) => y.score - x.score)[0];
+    const low = [...f.cats].sort((x, y) => x.score - y.score)[0];
+    return {
+      text: `${when}(${f.date.m}월 ${f.date.d}일, ${f.pillar.hanja}일) 운세를 펼쳐 볼게냥! ☀️\n\n🔮 **사주로 보면**\n총운 **${f.overall}점 · ${f.grade.emoji} ${f.grade.label}** — ${f.theme.emoji} ${f.theme.word}의 날, ${f.theme.line}.\n${top.icon} ${top.label}이 ${top.score}점으로 가장 좋고, ${low.icon} ${low.label}(${low.score}점)은 살짝 조심해요. ${low.line}\n💗 연애운 ${f.cats[0].score}점: ${f.cats[0].line}\n\n💡 **해결책**\n• ${f.todo[0]}\n• ${f.todo[f.todo.length - 1]}\n• 피할 일: ${f.avoid[0]}\n• 행운 컬러 **${f.lucky.color}**, 좋은 시간 **${f.bestBlock.label}(${f.bestBlock.range})**`,
+      expr: f.overall >= 72 ? 'sparkle' : f.overall >= 58 ? 'smile' : 'think',
+      chips: [tomorrow ? '오늘 운세는?' : '내일 운세는?', '이번 달 연애운은?', '행운 아이템 알려 줘'],
     };
   },
 
