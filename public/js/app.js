@@ -225,7 +225,7 @@ function talisman(kind, person) {
   const nameLabel = isMe ? '이름' : slot ? `${slot} 이름` : '상대 이름';
   const sealLabel = isMe ? '도장 찍고 사주 펼치기' : slot ? `도장 찍고 ${slot}로 정하기` : '도장 찍고 궁합 보기';
   return `<form class="talisman" data-form="${kind}" novalidate>
-    ${v.name ? `<div class="talisman__top"><button class="mini" type="button" data-action="form-clear">✏️ 새로 쓰기</button></div>` : ''}
+    <div class="talisman__top"><button class="mini" type="button" data-action="form-clear" aria-label="입력한 정보 모두 지우기">🔄 초기화</button></div>
     <div class="talisman__head">${head}</div>
     <div class="field">
       <label for="${id('name')}">${nameLabel}</label>
@@ -352,7 +352,7 @@ function viewHome() {
   if (state.presets.length) {
     html += talk('coco', 'happy', p('위 <strong>프리셋</strong>에서 이름을 누르면 그 사람 사주가 바로 펼쳐져요!') + p('새로운 사람은 부적에 적고 <strong>📌 저장</strong>해 두면 다음엔 한 번에 꺼내 볼 수 있어요.'), { side: 'right', scene: 'pink' });
   } else if (a) {
-    html += talk('coco', 'wink', p('다른 사람 사주가 궁금하면 <strong>✏️ 새로 쓰기</strong>를 누르고 적어요!') + p('<strong>📌 프리셋에 저장</strong>해 두면 다음엔 한 번에 꺼내 볼 수 있어요.'), { side: 'right', scene: 'pink' });
+    html += talk('coco', 'wink', p('다른 사람 사주가 궁금하면 <strong>🔄 초기화</strong>를 누르고 적어요!') + p('<strong>📌 프리셋에 저장</strong>해 두면 다음엔 한 번에 꺼내 볼 수 있어요.'), { side: 'right', scene: 'pink' });
   } else {
     html += talk('coco', 'happy', p('이름, 생년월일, 태어난 시간을 이 <strong>부적</strong>에 적어 주세요!') + p('음력 생일도 괜찮고, 시간을 몰라도 볼 수 있어요.'), { side: 'right', scene: 'pink', sfx: '쓱쓱' });
   }
@@ -465,6 +465,7 @@ function clearForm(form) {
   const fresh = document.querySelector(`form[data-form="${kind}"]`);
   fresh.scrollIntoView({ block: 'start' });
   fresh.querySelector('[name="name"]').focus({ preventScroll: true });
+  toast('입력 칸을 모두 비웠어요. 저장해 둔 사주와 프리셋은 그대로예요.');
 }
 
 /* ───────────── 오늘의 연애운 · 대운 ───────────── */
