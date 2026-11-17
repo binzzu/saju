@@ -3,8 +3,9 @@
 // 두 사람 모두 만 19세 이상일 때만 결과를 만든다.
 import {
   ELEMENTS, ELEMENT_KO, STEMS, BRANCHES, BRANCHES_KO, RED_FLAME,
-  branchRelation, stemsCombine, generates, peachBlossomBranch, yearMonthPillarsAt, seoulWallToUtc,
+  branchRelation, stemsCombine, generates, peachBlossomBranch, yearMonthPillarsAt, seoulWallToUtc, dayPillarOf, hourPillarOf,
 } from './saju.js';
+import { WEEKDAYS } from './text.js';
 import { ELEMENT_INFO, periodLove } from './reading.js';
 
 export const ADULT_AGE = 19;
@@ -34,6 +35,45 @@ const LEAD = {
 };
 
 // 두 사람에게 함께 부족한 오행 → 분위기 처방
+// 일간 오행별로 상대에게 잘 전해지는 다정한 스킨십 (손잡기·포옹·키스 수준)
+export const TOUCH_LIKES = {
+  wood: ['길에서 자연스럽게 손깍지 끼기', '헤어질 때 꼭 안아 주기', '살짝 이마에 뽀뽀'],
+  fire: ['만나자마자 반갑게 와락 포옹', '사람 없는 곳에서 짧은 기습 뽀뽀', '팔짱 끼고 신나게 걷기'],
+  earth: ['소파에서 어깨에 기대기', '담요 덮고 꼭 붙어 영화 보기', '천천히 오래 안아 주기'],
+  metal: ['손등에 다정한 입맞춤', '옷깃이나 머리를 정돈해 주기', '헤어질 때 확실하게 한 번 포옹'],
+  water: ['귓가에 다정하게 속삭이기', '밤 산책하며 손잡기', '눈 마주치고 천천히 키스'],
+};
+
+// 일간 오행별 귀여운 약점 (간지럼·약한 말·마음이 녹는 순간)
+export const SOFT_SPOTS = {
+  wood: { tickle: '옆구리', words: '"너 덕분에 힘이 나"', melt: '말해 둔 계획을 기억해 줄 때' },
+  fire: { tickle: '발바닥', words: '"오늘 진짜 멋있다(예쁘다)"', melt: '사람들 앞에서 내 편을 들어줄 때' },
+  earth: { tickle: '무릎 뒤', words: '"너랑 있으면 마음이 편해"', melt: '아플 때 따뜻한 죽을 챙겨 줄 때' },
+  metal: { tickle: '손바닥', words: '"역시 너밖에 없어"', melt: '약속을 1분도 안 늦고 지켜 줄 때' },
+  water: { tickle: '귀', words: '"네 얘기 더 듣고 싶어"', melt: '비 오는 날 우산 들고 데리러 와 줄 때' },
+};
+
+// 서로 원하는 것·싫은 것을 편하게 꺼내는 질문 카드
+export const TALK_CARDS = [
+  '요즘 나랑 있을 때 제일 좋은 순간은 언제야?',
+  '내가 해 주는 스킨십 중에 제일 좋은 건 뭐야?',
+  '오늘은 꼭 안겨 있고 싶은 날이야, 그냥 옆에 있고 싶은 날이야?',
+  '우리 속도가 빠르다거나 느리다고 느낀 적 있어?',
+  '불편했거나 싫었던 적 있으면 지금 편하게 말해 줘.',
+  '"오늘은 쉬고 싶어"를 말하는 우리만의 신호를 정해 볼까?',
+  '다음에 둘이 꼭 가 보고 싶은 분위기 좋은 곳은?',
+  '내가 어떤 말을 해 줄 때 제일 설레?',
+];
+
+export const CONSENT = [
+  '둘 다 원할 때만 — 한 사람이라도 망설이면 멈추기',
+  '"싫어", "잠깐만"은 언제든 말할 수 있고, 들은 쪽은 바로 멈추기',
+  '술에 많이 취했거나 판단이 흐릴 때는 미루기',
+  '마음은 중간에 바뀌어도 괜찮다는 걸 서로 기억하기',
+  '피임과 건강은 둘이 함께 챙기기',
+  '사진·영상은 상대 동의 없이 찍거나 보내지 않기',
+];
+
 const MOOD = {
   wood: { light: '자연광이 드는 창가', scent: '숲·허브 향', music: '어쿠스틱 기타', place: '숲길 산책 뒤 홈데이트', color: '그린·민트' },
   fire: { light: '은은한 캔들과 따뜻한 조명', scent: '시나몬·앰버 향', music: '분위기 있는 R&B', place: '노을 맛집, 야경 루프탑', color: '레드·코랄' },
@@ -168,7 +208,43 @@ export function analyzeIntimacy(a, b, nowMs = Date.now()) {
   const hot = [...months].sort((p, q) => q.score - p.score).slice(0, 2).sort(byDate);
   const rest = [...months].sort((p, q) => p.score - q.score)[0];
 
-  return { blocked: false, a, b, parts, raw, score, grade, styleA, styleB, strengths, cautions, tips, moodEl, mood, months, hot, rest };
+  // 둘만의 시간을 보내기 좋은 날 (앞으로 30일) · 시간대 (저녁~밤)
+  const dayScore = (st, br) => {
+    let v = 0;
+    const why = [];
+    for (const x of [a, b]) {
+      if (x.peachBranches.includes(br)) { v += 3; why.push(`${nim(x)}의 도화가 피는 날`); }
+      if (br === RED_FLAME[x.dm]) { v += 2; why.push(`${nim(x)}의 홍염이 뜨는 날`); }
+      const rel = branchRelation(br, x.dayBranch);
+      if (rel === 'harmony') { v += 3; why.push(`${nim(x)}의 배우자 자리와 합`); }
+      if (rel === 'trine') v += 1;
+      if (rel === 'clash') v -= 3;
+      if (stemsCombine(st, x.dm)) { v += 2; why.push(`${nim(x)}의 일간과 합`); }
+    }
+    return { v, why };
+  };
+  const dates = [];
+  for (let i = 1; i <= 30; i++) {
+    const d = new Date(nowMs + 9 * 3600000 + i * 86400000);
+    const yy = d.getUTCFullYear(), mm = d.getUTCMonth() + 1, dd = d.getUTCDate();
+    const pz = dayPillarOf(yy, mm, dd);
+    dates.push({ y: yy, m: mm, d: dd, wd: WEEKDAYS[d.getUTCDay()], ...dayScore(pz.stem, pz.branch) });
+  }
+  const goodDates = [...dates].sort((p, q) => q.v - p.v).slice(0, 3).sort((p, q) => dates.indexOf(p) - dates.indexOf(q));
+  const wdCount = {};
+  for (const x of [...dates].sort((p, q) => q.v - p.v).slice(0, 8)) wdCount[x.wd] = (wdCount[x.wd] || 0) + 1;
+  const goodWeekday = Object.keys(wdCount).sort((p, q) => wdCount[q] - wdCount[p])[0];
+  const NIGHT = [[9, '유시', '17:30~19:29'], [10, '술시', '19:30~21:29'], [11, '해시', '21:30~23:29'], [0, '자시', '23:30~01:29']];
+  const refStem = dayPillarOf(dates[0].y, dates[0].m, dates[0].d).stem;
+  const goodHour = NIGHT.map(([hb, name, range]) => ({ name, range, v: dayScore(hourPillarOf(refStem, hb).stem, hb).v }))
+    .sort((p, q) => q.v - p.v)[0];
+
+  const touch = (x) => ({ likes: TOUCH_LIKES[x.dmEl], soft: SOFT_SPOTS[x.dmEl] });
+
+  return {
+    blocked: false, a, b, parts, raw, score, grade, styleA, styleB, strengths, cautions, tips, moodEl, mood, months, hot, rest,
+    goodDates, goodWeekday, goodHour, touchA: touch(a), touchB: touch(b), cards: TALK_CARDS, consent: CONSENT,
+  };
 }
 
 export function intimacyGrade(score) {

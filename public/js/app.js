@@ -799,20 +799,20 @@ function compatResultHtml(c) {
       <span class="rx__stamp" aria-hidden="true">緣</span>
     </div></section>`;
   h += talk('myo', 'smile', p('궁합은 정해진 답이 아니라 서로를 이해하는 힌트야. 더 궁금한 건 상담실로 와라냥.'), { scene: 'night' });
-  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 궁합으로 상담하기</a><button class="btn btn--lilac" type="button" data-action="new-partner">다른 사람과 궁합 보기</button><button class="btn" type="button" data-action="share-compat">궁합 공유하기</button><a class="btn" href="#intimacy">🔥 속궁합도 보기</a><button class="btn" type="button" data-action="breakup-from-compat">💔 이 커플 이별수 보기</button>${state.me && state.me.status === 'after' ? '<button class="btn" type="button" data-action="reunion-from-compat">💞 이 사람과 재회운 보기</button>' : ''}</div>`;
+  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 궁합으로 상담하기</a><button class="btn btn--lilac" type="button" data-action="new-partner">다른 사람과 궁합 보기</button><button class="btn" type="button" data-action="share-compat">궁합 공유하기</button><a class="btn" href="#intimacy">19금 속궁합 보기</a><button class="btn" type="button" data-action="breakup-from-compat">💔 이 커플 이별수 보기</button>${state.me && state.me.status === 'after' ? '<button class="btn" type="button" data-action="reunion-from-compat">💞 이 사람과 재회운 보기</button>' : ''}</div>`;
   return h;
 }
 
 function viewCompat(mode = 'compat') {
   const a = me();
-  const sw = switchNav('궁합 보기 선택', [['compat', '💞 궁합'], ['intimacy', '🔥 속궁합']], mode);
+  if (mode === 'intimacy' && !adultOk()) return adultGate();
   if (!a) {
-    return sw + talk('coco', 'worry', p(`${mode === 'intimacy' ? '속궁합' : '궁합'}을 보려면 먼저 <strong>내 사주</strong>부터 알려 줘야 해요!`), { side: 'right', scene: 'pink' })
+    return talk('coco', 'worry', p(`${mode === 'intimacy' ? '속궁합' : '궁합'}을 보려면 먼저 <strong>내 사주</strong>부터 알려 줘야 해요!`), { side: 'right', scene: 'pink' })
       + `<div class="actions"><a class="btn btn--pink" href="#home">내 정보 입력하러 가기</a></div>`;
   }
-  let h = sw;
+  let h = '';
   h += mode === 'intimacy'
-    ? talk('myo', 'smug', p(`${esc(a.name)}님, 어른들의 궁합 <strong>속궁합</strong>이 궁금하다고? 🔥`) + p('노골적인 이야기는 안 해. 두 사람의 끌림, 스킨십 속도와 온도, 어떤 분위기에서 마음이 열리는지 볼 거야. 두 사람 모두 <strong>만 19세 이상</strong>이어야 볼 수 있어냥.'), { scene: 'night' })
+    ? talk('myo', 'smug', p(`${esc(a.name)}님, 여기는 어른들의 칸 <strong>19금</strong>이야. 😼`) + p('둘의 속궁합, 어울리는 분위기, 상대가 좋아할 스킨십과 귀여운 약점, 서로 마음을 여는 대화 카드까지 볼 수 있어. 두 사람 모두 <strong>만 19세 이상</strong>이어야 결과가 나와냥.'), { scene: 'night', caption: '19금 · 묘연 사주방 안쪽 방' })
     : talk('myo', 'smug', p(`${esc(a.name)}님, 궁합을 볼 상대가 있다고? 그 사람 정보를 부적에 적어 줘냥.`) + p('상대의 태어난 시간을 몰라도 괜찮아.'), { scene: 'lilac' });
   h += partnerPresets();
   h += talisman('partner', state.partner);
@@ -824,6 +824,17 @@ function viewCompat(mode = 'compat') {
     if (c) h += `<div id="compat-result">${compatResultHtml(c)}</div>`;
   }
   return h;
+}
+
+// 19금 칸 들어가기 전 확인 (나이 확인 탭이 생기면 adultOk·adultGate만 바꾸면 된다)
+const ADULT_KEY = 'adultOk';
+function adultOk() { return store.get(ADULT_KEY) === true; }
+function adultGate() {
+  return talk('coco', 'surprise', p('잠깐만요! 여기는 <strong>19금</strong> 칸이에요.') + p('<strong>만 19세 이상</strong>만 들어올 수 있어요.'), { side: 'right', scene: 'pink', sfx: '19금' })
+    + info(`<div class="gate"><p class="gate__mark" aria-hidden="true">19</p><h3>성인 확인</h3>
+      <p>이 칸에는 두 사람의 속궁합, 분위기, 스킨십 이야기가 담겨 있어요. 만 19세 이상인가요?</p>
+      <div class="gate__btns"><button class="btn btn--pink" type="button" data-action="adult-yes">네, 만 19세 이상이에요</button><a class="btn" href="#home">아니요, 돌아갈래요</a></div>
+      <p class="note">확인은 이 기기에만 기억돼요. 결과는 두 사람의 생일이 모두 만 19세 이상일 때만 나와요.</p></div>`, 'paper');
 }
 
 function intimacyMonths(r) {
@@ -871,9 +882,19 @@ function intimacyResultHtml(r) {
       <p class="part__short">${esc(pt.short)}</p><p class="part__text">${esc(pt.text)}</p>
     </li>`).join('')}</ul>`);
   h += info(`<h3>두 사람의 애정 표현 스타일</h3><div class="styles">${styleCard(r.a, r.styleA)}${styleCard(r.b, r.styleB)}</div>`, 'pink');
+  const touchCard = (to, from, t) => `<div class="style">
+      <p class="style__type">💗 <b>${esc(to.name)}님</b>이 좋아할 스킨십</p>
+      <ul class="ticks">${t.likes.map((x) => `<li>${x}</li>`).join('')}</ul>
+      <p class="note">🪶 간지럼 타는 곳: <b>${t.soft.tickle}</b><br>💬 약한 말: <b>${t.soft.words}</b><br>🫠 마음이 녹는 순간: <b>${t.soft.melt}</b></p>
+      <p class="note">→ ${esc(from.name)}님이 기억해 두세요!</p>
+    </div>`;
+  h += info(`<h3>💗 상대가 좋아할 스킨십 · 귀여운 약점</h3><div class="styles">${touchCard(r.b, r.a, r.touchB)}${touchCard(r.a, r.b, r.touchA)}</div>`, 'lilac');
   h += talk('coco', 'love', `<p>두 사람의 좋은 점!</p><ul class="ticks">${r.strengths.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, { side: 'right', scene: 'mint' });
   h += talk('myo', 'think', `<p>이건 맞춰 가야 한다냥.</p><ul class="ticks">${r.cautions.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, { scene: 'lilac' });
   h += info(`<h3>🔥 설렘 지수가 높은 달</h3>${intimacyMonths(r)}<ul class="ticks ticks--plain">${r.hot.map((m) => `<li><b>🔥 ${monthName(m, base)}</b> — ${esc(m.why.slice(0, 2).join(' / ') || '두 사람의 연애운이 함께 오르는 달')}. 특별한 데이트는 이때!</li>`).join('')}<li><b>🫖 ${monthName(r.rest, base)}</b> — 서로 피곤하기 쉬운 달이에요. 무리한 이벤트보다 편안한 휴식 데이트로.</li></ul>`);
+  h += info(`<h3>🌙 둘만의 시간</h3><p>사주로 본 두 사람이 가장 설레는 날과 시간이에요.</p>
+    <ul class="days">${r.goodDates.map((d) => `<li class="day"><b>${d.m}월 ${d.d}일</b><span>${d.wd}요일</span><small>${esc(d.why[0] || '두 사람 기운이 잘 맞는 날')}</small></li>`).join('')}</ul>
+    <p class="note" style="margin-top:10px">📅 특히 <b>${r.goodWeekday}요일</b>에 좋은 날이 많아요 · 🕯️ 분위기가 무르익는 시간: <b>${r.goodHour.name}(${r.goodHour.range})</b></p>`, 'mint');
   h += info(`<h3>💞 더 가까워지는 법</h3><ul class="ticks">${r.tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, 'mint');
   h += `<section class="panel"><div class="rx">
       <div class="rx__head"><h3 class="lead-em" style="font-size:var(--s-5)">무드 처방전</h3><span>${A} ♥ ${B} · ${ELEMENT_KO[r.moodEl]} 기운 채우기</span></div>
@@ -887,7 +908,9 @@ function intimacyResultHtml(r) {
       <span class="rx__stamp" aria-hidden="true">緣</span>
     </div></section>`;
   h += talk('myo', 'smile', p('속궁합 점수보다 중요한 건 서로의 속도를 존중하는 마음이야.') + p('좋은 건 좋다고, 싫은 건 싫다고 편하게 말할 수 있는 사이가 최고의 속궁합이다냥.'), { scene: 'night' });
-  h += info('<p class="safety">💡 <b>속궁합의 기본은 동의와 존중이에요.</b> 싫다는 말은 언제든 할 수 있고, 들은 쪽은 그 뜻을 존중해야 해요. 서로의 건강과 안전도 함께 챙겨 주세요.</p>', 'paper');
+  h += info(`<h3>💬 대화 카드</h3><p class="note">원하는 것·싫은 것은 말해야 알아요. 한 장씩 골라 서로에게 물어보세요.</p>
+    <ul class="msgs talkcards">${r.cards.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, 'yellow');
+  h += info(`<h3>✅ 동의·안전 체크리스트</h3><ul class="ticks">${r.consent.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, 'paper');
   h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 결과로 상담하기</a><a class="btn btn--lilac" href="#compat">💞 일반 궁합 보기</a><button class="btn" type="button" data-action="share-intimacy">결과 공유하기</button></div>`;
   return h;
 }
@@ -1396,7 +1419,7 @@ const app = document.getElementById('app');
 
 function render() {
   const route = (location.hash || '#home').slice(1);
-  const tab = route === 'home' || route === 'start' ? 'start' : route === 'reunion' ? 'breakup' : route === 'intimacy' ? 'compat' : route === 'today' ? 'reading' : route;
+  const tab = route === 'home' || route === 'start' ? 'start' : route === 'reunion' ? 'breakup' : route === 'today' ? 'reading' : route;
   let html;
   if (route === 'reading') html = viewReading();
   else if (route === 'compat') html = viewCompat('compat');
@@ -1412,7 +1435,7 @@ function render() {
     else t.removeAttribute('aria-current');
   });
   document.title = {
-    reading: '내 연애 사주 — 묘연의 연애사주', compat: '궁합 — 묘연의 연애사주', chat: '상담실 — 묘연의 연애사주', breakup: '이별수 — 묘연의 연애사주', reunion: '재회운 — 묘연의 연애사주', intimacy: '속궁합 — 묘연의 연애사주', today: '오늘의 운세 — 묘연의 연애사주',
+    reading: '내 연애 사주 — 묘연의 연애사주', compat: '궁합 — 묘연의 연애사주', chat: '상담실 — 묘연의 연애사주', breakup: '이별수 — 묘연의 연애사주', reunion: '재회운 — 묘연의 연애사주', intimacy: '19금 속궁합 — 묘연의 연애사주', today: '오늘의 운세 — 묘연의 연애사주',
   }[route] || '묘연의 연애사주 — 고양이 점술사가 웹툰으로 풀어 주는 연애 사주·궁합';
   if (route === 'chat') scrollChat();
   if (route === 'start') {
@@ -1599,6 +1622,7 @@ app.addEventListener('click', (ev) => {
   if (action === 'share-reunion') { shareReunion(); return; }
   if (action === 'share-intimacy') { shareIntimacy(); return; }
   if (action === 'share-today') { shareToday(); return; }
+  if (action === 'adult-yes') { store.set(ADULT_KEY, true); render(); return; }
   if (action === 'reunion-from-compat') {
     if (!state.me || !state.partner) return;
     state.pair = { a: { ...state.me }, b: { ...state.partner }, done: true };

@@ -757,3 +757,23 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .dolist h3 { margin-top: 0; }
 .ticks--x li::before { content: '✖'; color: var(--cinnabar); font-size: 13px; top: 2px; }
 @media (min-width: 480px) { .dolist { grid-template-columns: 1fr 1fr; } }
+
+/* ───────── 19금 ───────── */
+.gate { text-align: center; padding: 6px 4px; }
+.gate__mark {
+  display: inline-grid; place-items: center; width: 64px; height: 64px; margin: 0 auto 6px; border-radius: 50%;
+  border: 5px solid var(--cinnabar); color: var(--cinnabar); font-family: var(--f-display); font-size: 28px; line-height: 1;
+}
+.gate__btns { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin: 14px 0 10px; }
+.talkcards li { background: var(--paper); }
+.tabs a[data-tab="intimacy"] { color: #FFB3C9; }
+.tabs a[data-tab="intimacy"][aria-current='page'] { color: var(--ink); }
+@media (max-width: 430px) {
+  .tabs { overflow-x: auto; scrollbar-width: none; max-width: calc(100vw - 72px); }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs { gap: 2px; padding: 3px; }
+  .tabs a { padding: 5px 6px; font-size: 12.5px; }
+}
+@media (max-width: 380px) {
+  .tabs a { padding: 5px 5px; font-size: 12px; }
+}
