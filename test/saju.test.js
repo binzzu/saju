@@ -17,6 +17,7 @@ import { josa, renderRich } from '../public/js/text.js';
 import {
   rankCompat, analyzeSsum, analyzeAnniv, monthReport, findIdeal, affinityLevel, unlockedExpr, gainAffinity,
 } from '../public/js/extras.js';
+import { futurePartner, futureAvatar } from '../public/js/future.js';
 import {
   PRESET_LIMIT, personKey, loadPresets, upsertPreset, removePreset, restorePreset, shortBirth,
 } from '../public/js/presets.js';
@@ -469,4 +470,26 @@ test('호감도: 단계·해금 표정·하루 한도', () => {
   const next = gainAffinity(s, 'myo', 2, '2026-11-19');
   assert.equal(next.gained, 2);
   assert.equal(next.state.coco, 0);
+});
+
+test('미래의 연인: 생김새·키·MBTI·나이·만나는 때와 곳, 성별 선택', () => {
+  const a = person('민지', 'F', 1997, 3, 14, 9);
+  const r = futurePartner(a, undefined, NOW);
+  assert.equal(r.gender, 'M'); // 기본은 나와 다른 성별
+  for (const k of ['face', 'eyes', 'hair', 'vibe', 'style', 'body']) assert.ok(r.look[k], k);
+  assert.ok(r.height.min >= 165 && r.height.max <= 190 && r.height.max - r.height.min === 4);
+  assert.match(r.mbti.type, /^[EI][SN][TF][JP]$/);
+  assert.match(r.mbti.alt, /^[EI][SN][TF][JP]$/);
+  assert.notEqual(r.mbti.type, r.mbti.alt);
+  assert.equal(r.age.list.reduce((t, x) => t + x.pct, 0), 100);
+  const when = r.when.year * 12 + r.when.month;
+  assert.ok(when >= 2026 * 12 + 11 && when < 2026 * 12 + 11 + 36);
+  assert.equal(r.meets.length, 2);
+  assert.notEqual(r.meets[0].where, r.meets[1].where);
+  const f = futurePartner(a, 'F', NOW);
+  assert.equal(f.word, '여자친구');
+  assert.ok(f.height.mid < r.height.mid);
+  assert.match(futureAvatar(f), /^<svg[^>]+xmlns/);
+  // 같은 사주면 언제나 같은 결과
+  assert.deepEqual(futurePartner(a, 'M', NOW).look, r.look);
 });
