@@ -896,6 +896,20 @@ function intimacyResultHtml(r) {
   h += info(`<h3>🗝️ 상대의 마음을 여는 법</h3><p class="note">사주로 가능성이 가장 높은 3가지만 골랐어요.</p>
     <div class="styles">${openCard(r.b, r.a, r.openB)}${openCard(r.a, r.b, r.openA)}</div>
     <p class="disclaimer">🔮 <b>사주는 완벽하지 않아요.</b> 태어난 순간의 기운으로 본 "가능성이 높은 흐름"일 뿐, 사람의 마음은 사주보다 훨씬 다양해요. 진짜 답은 상대에게 직접 물어보는 거예요. 아래 대화 카드를 활용해 보고, 상대가 원하지 않는 표현은 아무리 잘 맞는다고 나와도 멈춰 주세요.</p>`, 'pink');
+  const weaponCard = (me, to, list) => `<div class="style">
+      <p class="style__type">💘 <b>${esc(me.name)}님</b>의 연애 무기 <small class="note">— ${esc(to.name)}님에게</small></p>
+      <ol class="opens">${list.map((w) => `<li><span class="opens__stars" aria-label="효과 ${w.stars}단계">${'★'.repeat(w.stars)}${'☆'.repeat(3 - w.stars)}</span> <b>${esc(w.name)}</b><br><small>${esc(w.why)}${w.fit ? ` ${esc(w.fit)}` : ''}</small><br><small class="opens__use">👉 ${esc(w.use)}</small></li>`).join('')}</ol>
+    </div>`;
+  h += info(`<h3>💘 나만의 연애 무기</h3><p class="note">내 사주에서 가장 강한 매력 3가지와, 그게 상대에게 잘 통하는 이유예요.</p>
+    <div class="styles">${weaponCard(r.a, r.b, r.weaponsA)}${weaponCard(r.b, r.a, r.weaponsB)}</div>
+    <p class="disclaimer">🔮 <b>사주는 완벽하지 않아요.</b> 무기는 "내가 가진 좋은 점"일 뿐, 상대를 마음대로 움직이는 기술이 아니에요. 상대가 좋아하는지 반응을 보며 써 주세요.</p>`, 'lilac');
+  const L = r.lead;
+  h += info(`<h3>🎯 주도권 밸런스</h3>
+    <p class="style__type">${L.type.emoji} <b>${esc(L.type.title)}</b></p><p>${esc(L.type.text)}</p>
+    <div class="leadbar" role="img" aria-label="${A}님 ${L.pctA}%, ${B}님 ${100 - L.pctA}%"><span style="width:${L.pctA}%">${A} ${L.pctA}%</span><span>${B} ${100 - L.pctA}%</span></div>
+    <ul class="leads">${L.areas.map((x) => `<li><div class="leads__head">${x.icon} <b>${x.label}</b><span class="tag">${x.who ? `${esc(x.who)}님 리드` : '번갈아'}</span></div><p>${esc(x.text)}</p></li>`).join('')}</ul>
+    <ul class="ticks">${L.tips.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
+    <p class="disclaimer">🔮 <b>사주는 완벽하지 않아요.</b> 사주로 본 "편한 흐름"일 뿐이에요. 누가 이끌지는 두 사람이 이야기해서 정하는 게 정답이에요.</p>`, 'mint');
   h += talk('coco', 'love', `<p>두 사람의 좋은 점!</p><ul class="ticks">${r.strengths.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, { side: 'right', scene: 'mint' });
   h += talk('myo', 'think', `<p>이건 맞춰 가야 한다냥.</p><ul class="ticks">${r.cautions.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, { scene: 'lilac' });
   h += info(`<h3>🔥 설렘 지수가 높은 달</h3>${intimacyMonths(r)}<ul class="ticks ticks--plain">${r.hot.map((m) => `<li><b>🔥 ${monthName(m, base)}</b> — ${esc(m.why.slice(0, 2).join(' / ') || '두 사람의 연애운이 함께 오르는 달')}. 특별한 데이트는 이때!</li>`).join('')}<li><b>🫖 ${monthName(r.rest, base)}</b> — 서로 피곤하기 쉬운 달이에요. 무리한 이벤트보다 편안한 휴식 데이트로.</li></ul>`);

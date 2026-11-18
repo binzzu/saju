@@ -108,6 +108,96 @@ export function openHeart(to, tempKey) {
   });
 }
 
+// 나만의 연애 무기 — 내 사주의 강한 매력(own)과, 그 매력이 특히 잘 통하는 상대 성향(fits)
+const WEAPONS = [
+  { name: '다정한 말과 진심 어린 칭찬', own: ['fire', '식상', 'wood'], fits: ['weak', 'wood', '식상'], use: '헤어질 때나 답장 끝에 한마디 더 붙여 보세요.' },
+  { name: '한결같은 믿음직함', own: ['metal', 'earth', '관성'], fits: ['재성', '관성', 'metal', 'earth'], use: '약속 시간·연락 시간을 꾸준히 지키는 것만으로 빛나요.' },
+  { name: '따뜻하게 챙겨 주는 마음', own: ['earth', '인성'], fits: ['wood', '인성', 'water'], use: '피곤해 보이는 날 따뜻한 음료 하나 건네 보세요.' },
+  { name: '깊은 대화와 공감력', own: ['water', '인성'], fits: ['water', '인성', 'metal'], use: '조용한 카페나 밤 산책에서 진가가 나와요.' },
+  { name: '함께 있으면 웃게 되는 밝은 에너지', own: ['fire', '식상', '비겁'], fits: ['earth', 'metal', 'water'], use: '차분한 날일수록 장난 한 번, 웃음 한 번이 통해요.' },
+  { name: '센스 있는 데이트 기획력', own: ['재성', 'wood', 'strong'], fits: ['weak', 'earth', '재성'], use: '다음 데이트 코스를 먼저 제안해 보세요.' },
+  { name: '자연스럽게 눈길을 끄는 매력(도화)', own: ['dohwa'], fits: ['fire', '식상', 'water'], use: '꾸민 날 사진 한 장, 눈 마주치며 웃는 순간이 무기예요.' },
+  { name: '말없이도 흐르는 분위기(홍염)', own: ['hongyeom'], fits: ['water', 'fire'], use: '조명 좋은 곳, 음악 있는 곳에서 더 빛나요.' },
+  { name: '알수록 궁금해지는 깊이(화개)', own: ['hwagae'], fits: ['water', '인성', 'metal'], use: '좋아하는 책·음악·영화 이야기를 꺼내 보세요.' },
+  { name: '어디든 함께 떠나는 행동력(역마)', own: ['yeokma', 'fire'], fits: ['wood', 'fire', '식상'], use: '즉흥 여행이나 처음 가 보는 동네 데이트를 제안해 보세요.' },
+  { name: '기댈 수 있는 듬직함', own: ['strong', '비겁', 'gwiin'], fits: ['weak', '인성'], use: '상대가 고민할 때 "내가 같이 해 볼게"라고 말해 주세요.' },
+  { name: '상대를 편하게 해 주는 섬세한 배려', own: ['weak', 'water', 'balanced'], fits: ['strong', '비겁'], use: '상대가 하고 싶은 걸 먼저 물어봐 주세요.' },
+];
+const WEAPON_WHY = {
+  wood: '새싹형 일간이라 마음을 아끼지 않고 표현해요', fire: '불꽃형 일간이라 표현이 시원시원해요', earth: '포근형 일간이라 곁에 있으면 마음이 편해져요',
+  metal: '보석형 일간이라 말과 행동이 한결같아요', water: '물결형 일간이라 감성이 깊고 잘 들어 줘요',
+  인성: '사람을 품는 별(인성)이 강해요', 비겁: '당당한 자신감의 별(비겁)이 강해요', 식상: '표현의 별(식상)이 강해요',
+  재성: '현실 감각의 별(재성)이 강해요', 관성: '책임감의 별(관성)이 강해요',
+  strong: '기운이 강한 리드형이에요', weak: '상대에게 맞춰 주는 맞춤형이에요', balanced: '상황에 따라 유연한 유연형이에요',
+  dohwa: '매력의 별 도화가 있어요', hongyeom: '분위기 미인의 별 홍염이 있어요', hwagae: '예술과 깊이의 별 화개가 있어요',
+  yeokma: '움직임의 별 역마가 있어요', gwiin: '도움을 주는 별 귀인이 있어요',
+};
+const topGroup = (x) => Object.keys(x.groupCounts).sort((p, q) => x.groupCounts[q] - x.groupCounts[p])[0];
+
+/** me의 연애 무기 3가지 — 내 사주의 강점 + to(상대)에게 특히 통하는지 */
+export function loveWeapons(me, to) {
+  const W = { [me.dmEl]: 3, [topGroup(me)]: 3, [me.strength.key]: 2 };
+  for (const c of me.charms) W[c] = 3;
+  const F = { [to.dmEl]: 2, [topGroup(to)]: 2, [to.strength.key]: 1 };
+  const ranked = WEAPONS.map((w, i) => {
+    const hit = w.own.filter((t) => W[t]);
+    const fit = w.fits.filter((t) => F[t]);
+    const score = hit.reduce((s, t) => s + W[t], 0) + fit.reduce((s, t) => s + F[t], 0);
+    return { ...w, i, hit, fit, score, own: hit.reduce((s, t) => s + W[t], 0) };
+  }).filter((x) => x.own > 0).sort((x, y) => y.score - x.score || x.i - y.i);
+  const used = new Set();
+  return ranked.slice(0, 3).map((x) => {
+    const order = [...x.hit].sort((p, q) => W[q] - W[p]);
+    const main = order.find((t) => !used.has(t)) || order[0];
+    used.add(main);
+    const fitMain = [...x.fit].sort((p, q) => F[q] - F[p])[0];
+    let fit = '';
+    if (fitMain === to.dmEl) fit = `${to.name}님은 ${OPEN_WHY[fitMain]} 마음이 열려서 특히 잘 통해요.`;
+    else if (fitMain) fit = `${to.name}님은 ${josa(OPEN_WHY[fitMain], '이라', '라')} 특히 잘 통해요.`;
+    return { name: x.name, use: x.use, stars: x.score >= 7 ? 3 : x.score >= 4 ? 2 : 1, why: `${me.name}님은 ${WEAPON_WHY[main]}.`, fit };
+  });
+}
+
+// 주도권 밸런스 — 영역별로 누가 이끌면 자연스러운지
+const LEAD_AREAS = [
+  { id: 'date', icon: '🗺️', label: '데이트 계획', score: (x) => x.groupCounts.재성 + (x.strength.key === 'strong' ? 2 : x.strength.key === 'balanced' ? 1 : 0) + (['wood', 'fire'].includes(x.dmEl) ? 1 : 0),
+    lead: '코스와 장소를 정하고', follow: '"좋다!" 하고 즐겁게 따라가며 다음엔 가고 싶은 곳을 하나씩 말해 주세요.' },
+  { id: 'contact', icon: '💬', label: '연락', score: (x) => x.groupCounts.식상 + (['water', 'fire'].includes(x.dmEl) ? 1.5 : 0) + (x.charms.includes('dohwa') ? 1 : 0),
+    lead: '먼저 안부를 묻고 대화를 열고', follow: '답장에 질문 하나를 붙여 대화가 이어지게 해 주세요.' },
+  { id: 'express', icon: '💌', label: '마음 표현·고백', score: (x) => x.groupCounts.식상 + x.groupCounts.비겁 * 0.5 + (x.dmEl === 'fire' ? 2 : x.dmEl === 'wood' ? 1 : 0) + (x.strength.key === 'strong' ? 1 : 0),
+    lead: '"좋아해"를 먼저 꺼내고', follow: '표현을 받으면 꼭 같은 크기로 돌려주세요. 그래야 리드하는 쪽이 지치지 않아요.' },
+  { id: 'repair', icon: '🕊️', label: '다툰 뒤 화해', score: (x) => x.groupCounts.인성 + (['earth', 'water'].includes(x.dmEl) ? 1.5 : 0) + (x.strength.key === 'strong' ? 0 : 1),
+    lead: '먼저 손을 내밀어 분위기를 풀고', follow: '내민 손을 바로 잡아 주고 "먼저 말해 줘서 고마워"라고 해 주세요.' },
+];
+
+export function leadBalance(a, b) {
+  let la = 0, lb = 0;
+  const areas = LEAD_AREAS.map((ar) => {
+    const sa = ar.score(a), sb = ar.score(b);
+    const diff = sa - sb;
+    let who = null;
+    if (diff >= 1) { who = a; la++; } else if (diff <= -1) { who = b; lb++; }
+    const other = who === a ? b : a;
+    return {
+      id: ar.id, icon: ar.icon, label: ar.label, who: who ? who.name : null,
+      text: who ? `${who.name}님이 ${ar.lead} ${other.name}님은 ${ar.follow}` : `두 사람 기운이 비슷해요. 이번엔 ${a.name}님, 다음엔 ${b.name}님처럼 번갈아 이끌면 공평하고 재밌어요.`,
+    };
+  });
+  const tie = 4 - la - lb;
+  const pctA = Math.round(((la + tie / 2) / 4) * 100);
+  let type;
+  if (Math.abs(la - lb) <= 1) type = { title: '시소형 커플', emoji: '⚖️', text: '주도권이 고르게 나뉘어 있어요. 영역마다 잘하는 사람이 이끄는 "분업"이 가장 잘 맞아요.' };
+  else {
+    const L = la > lb ? a : b, F = la > lb ? b : a;
+    type = { title: `${L.name}님 리드형 커플`, emoji: '🧭', text: `${L.name}님이 이끄는 영역이 많아요. ${F.name}님의 의견을 먼저 물어봐 주면 끌려가는 느낌 대신 "함께 간다"는 느낌이 들어요.` };
+  }
+  const tips = [];
+  if (Math.abs(la - lb) <= 1 && a.strength.key === 'strong' && b.strength.key === 'strong') tips.push('둘 다 이끌고 싶은 사이예요. 정하기 전에 "너는 어때?" 한 번만 물어도 부딪힘이 확 줄어요.');
+  if (Math.abs(la - lb) <= 1 && a.strength.key === 'weak' && b.strength.key === 'weak') tips.push('둘 다 상대가 먼저 해 주길 기다리는 사이예요. 사소한 것부터 먼저 제안하는 쪽이 관계를 데워요.');
+  tips.push('주도권은 이기는 게 아니라 나눠 드는 짐이에요. 이끈 사람에겐 고마움을, 따라 준 사람에겐 배려를 말로 전해 주세요.');
+  return { areas, pctA, type, tips, leadA: la, leadB: lb };
+}
+
 export const CONSENT = [
   '둘 다 원할 때만 — 한 사람이라도 망설이면 멈추기',
   '"싫어", "잠깐만"은 언제든 말할 수 있고, 들은 쪽은 바로 멈추기',
@@ -289,6 +379,7 @@ export function analyzeIntimacy(a, b, nowMs = Date.now()) {
     blocked: false, a, b, parts, raw, score, grade, styleA, styleB, strengths, cautions, tips, moodEl, mood, months, hot, rest,
     goodDates, goodWeekday, goodHour, touchA: touch(a), touchB: touch(b), cards: TALK_CARDS, consent: CONSENT,
     openB: openHeart(b, tempKey), openA: openHeart(a, tempKey),
+    weaponsA: loveWeapons(a, b), weaponsB: loveWeapons(b, a), lead: leadBalance(a, b),
   };
 }
 
@@ -305,5 +396,7 @@ export function summaryIntimacyForAI(r) {
   return [
     `속궁합(스킨십·애정 표현 궁합): ${r.a.name} × ${r.b.name} ${r.score}점 (${r.grade.title}) — ${r.parts.map((p) => `${p.label} ${p.points}/${p.max}: ${p.short}`).join(' / ')}`,
     `애정 표현 스타일: ${r.a.name} ${r.styleA.type}·${r.styleA.lead.label}, ${r.b.name} ${r.styleB.type}·${r.styleB.lead.label} / 설렘 지수 높은 달: ${r.hot.map((x) => `${x.year}.${x.month}`).join(', ')}`,
+    `연애 무기: ${r.a.name} ${r.weaponsA.map((w) => w.name).join(', ')} / ${r.b.name} ${r.weaponsB.map((w) => w.name).join(', ')}`,
+    `주도권 밸런스: ${r.lead.type.title} — ${r.lead.areas.map((x) => `${x.label} ${x.who ? `${x.who} 리드` : '번갈아'}`).join(', ')}`,
   ].join('\n');
 }

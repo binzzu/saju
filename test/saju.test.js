@@ -298,6 +298,14 @@ test('속궁합: 다섯 항목 100점 만점, 스타일·달·분위기 처방�
     assert.equal(list.length, 3);
     for (const o of list) { assert.ok(o.stars >= 1 && o.stars <= 3); assert.match(o.why, /님은 /); assert.doesNotMatch(o.why, /사주이라|형이라 이 방법/); }
   }
+  // 나만의 연애 무기 + 주도권 밸런스
+  for (const list of [r.weaponsA, r.weaponsB]) {
+    assert.equal(list.length, 3);
+    for (const w of list) { assert.ok(w.stars >= 1 && w.stars <= 3); assert.match(w.why, /님은 .+요\.$/); assert.ok(w.use); assert.doesNotMatch(w.fit, /이라 특히|undefined/); }
+  }
+  assert.equal(r.lead.areas.length, 4);
+  assert.equal(r.lead.leadA + r.lead.leadB + r.lead.areas.filter((x) => !x.who).length, 4);
+  assert.ok(r.lead.pctA >= 0 && r.lead.pctA <= 100 && r.lead.type.title);
 });
 
 test('속궁합: 두 사람 중 한 명이라도 만 19세 미만이면 결과를 만들지 않는다', () => {

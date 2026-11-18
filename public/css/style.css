@@ -782,3 +782,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .opens small { color: #5B4A72; font-size: var(--s-1); }
 .opens__stars { color: #E9B530; letter-spacing: 1px; }
 .disclaimer { margin: 14px 0 0; padding: 10px 12px; border: 2px dashed var(--ink); border-radius: 12px; background: var(--paper); font-size: var(--s-1); line-height: 1.6; }
+.opens__use { color: #2E7D5B !important; }
+.leadbar { display: flex; margin: 10px 0; border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; font-size: var(--s-1); font-weight: 700; }
+.leadbar span { padding: 4px 8px; white-space: nowrap; }
+.leadbar span:first-child { background: #FFB4C8; min-width: 25%; }
+.leadbar span:last-child { flex: 1; background: #B9E4F5; text-align: right; }
+.leads { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 8px; }
+.leads li { padding: 8px 10px; border: 2px solid var(--ink); border-radius: 12px; background: var(--paper); font-size: var(--s-2); }
+.leads li p { margin: 4px 0 0; }
+.leads__head { display: flex; align-items: center; gap: 6px; }
+.leads__head .tag { margin-left: auto; }
