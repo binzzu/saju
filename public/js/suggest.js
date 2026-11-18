@@ -45,10 +45,10 @@ const LINK = {
   trust: ['#compat', '💞 궁합 자세히 보기'], marriage: ['#compat', '💞 궁합 자세히 보기'],
   breakup: ['#breakup', '💔 이별수 자세히 보기'], reunion: ['#reunion', '💞 재회운 자세히 보기'],
   moveon: ['#reunion', '💞 재회운 보기'], intimacy: ['#intimacy', '🔥 속궁합 자세히 보기'],
-  today: ['#today', '☀️ 오늘의 운세 전체 보기'], period: ['#today', '☀️ 오늘의 운세 보기'], lucky: ['#today', '☀️ 오늘의 행운 보기'],
+  today: ['#today', '☀️ 오늘의 운세 전체 보기'], period: ['#month', '🗓️ 이달의 연애 리포트 보기'], lucky: ['#today', '☀️ 오늘의 행운 보기'],
   timing: ['#reading', '📖 내 연애운 달력 보기'], self: ['#reading', '📖 내 사주 풀이 보기'],
-  ideal: ['#reading', '📖 배우자 자리 풀이 보기'], charm: ['#reading', '📖 매력 신살 보기'],
-  confession: ['#reading', '📖 내 연애운 달력 보기'], age: ['#compat', '💞 궁합 보러 가기'],
+  ideal: ['#ideal', '🔍 사주로 이상형 찾기'], charm: ['#reading', '📖 매력 신살 보기'],
+  confession: ['#ssum', '💭 썸 성공 확률 보기'], age: ['#compat', '💞 궁합 보러 가기'],
 };
 
 const norm = (s) => String(s).replace(/[\s?!.~]+/g, '').replace(/^💡/, '');

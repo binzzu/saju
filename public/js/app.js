@@ -16,6 +16,10 @@ import { analyzeIntimacy, summaryIntimacyForAI } from './intimacy.js';
 import { dailyFortune, weekFortune, summaryDailyForAI } from './daily.js';
 import { suggestQuestions, lastTopicOf } from './suggest.js';
 import {
+  rankCompat, analyzeSsum, analyzeAnniv, monthReport, findIdeal,
+  affinityLevel, unlockedExpr, gainAffinity, EXPR_UNLOCK, AFFINITY_LINES,
+} from './extras.js';
+import {
   PRESET_LIMIT, personKey, loadPresets, findPreset, upsertPreset, removePreset, restorePreset, shortBirth, sanitizePerson,
 } from './presets.js';
 
@@ -36,6 +40,9 @@ const state = {
   pair: loadPair(store.get('pair')),          // 이별수: 두 사람 A·B, 결과 보기를 눌렀는지
   pairEdit: null,                             // 'a' | 'b' — 직접 입력 신청서가 열린 칸
   dayOffset: 0,                               // 오늘의 운세: 오늘로부터 며칠 뒤(음수면 전)
+  monthOffset: 0,                             // 이달의 연애 리포트: 이번 달로부터 몇 달 뒤
+  anniv: store.get('anniv'),                  // 기념일: 사귄 날 {y,m,d}
+  affinity: store.get('affinity'),            // 묘연·코코 호감도
   ai: null, // null | 'server'(Node + API 키) | 'artifact'(Claude 아티팩트의 sample)
   sample: null,
   busy: false,
@@ -73,6 +80,8 @@ function resetMemo(which) {
   if (which === 'partner') delete memo.partner;
   delete memo.compat;
   delete memo.intimacy;
+  delete memo.ssum;
+  delete memo.anniv;
 }
 // 속궁합 (나 × 궁합 상대, 두 사람 모두 만 19세 이상일 때만 결과)
 function intimacy() {
@@ -81,7 +90,10 @@ function intimacy() {
   if (!memo.intimacy) memo.intimacy = analyzeIntimacy(a, b);
   return memo.intimacy;
 }
-const compatResultId = () => ((location.hash || '').slice(1) === 'intimacy' ? 'intimacy-result' : 'compat-result');
+const compatResultId = () => {
+  const route = (location.hash || '').slice(1);
+  return ['intimacy', 'ssum', 'anniv'].includes(route) ? `${route}-result` : 'compat-result';
+};
 
 // 지금 보는 사람을 바꾼다 (다른 사람이면 상담 기록은 새로 시작)
 function setMe(person) {
@@ -333,6 +345,7 @@ function cover() {
       <h1 class="cover__title">묘연<small>의</small> 연애사주</h1>
       <p class="cover__sub">고양이 점술사들이 웹툰으로 풀어 주는 연애 사주 · 궁합 · 1:1 상담</p>
     </div>
+    <button class="theme theme--inline" type="button" data-theme-toggle>${document.documentElement.dataset.theme === 'dark' ? '☀️ 밝게' : '🌙 어둡게'}</button>
     <div class="cover__cast">${cast}</div>
   </section>`;
 }
@@ -357,6 +370,7 @@ function viewHome() {
     html += talk('coco', 'happy', p('이름, 생년월일, 태어난 시간을 이 <strong>부적</strong>에 적어 주세요!') + p('음력 생일도 괜찮고, 시간을 몰라도 볼 수 있어요.'), { side: 'right', scene: 'pink', sfx: '쓱쓱' });
   }
   html += talisman('me', state.me);
+  html += affinityCard();
   return html;
 }
 
@@ -699,7 +713,7 @@ function viewReading() {
 /* ───────────── 화면: 오늘의 운세 ───────────── */
 
 function readingSwitch(mode) {
-  return switchNav('내 사주 보기 선택', [['reading', '📖 내 사주 풀이'], ['today', '☀️ 오늘의 운세']], mode);
+  return switchNav('내 사주 보기 선택', [['reading', '📖 사주 풀이'], ['today', '☀️ 오늘 운세'], ['month', '🗓️ 이달 리포트'], ['ideal', '🔍 이상형']], mode).replace('class="modes"', 'class="modes modes--4"');
 }
 
 const DAY_MIN = -7, DAY_MAX = 30;
@@ -752,8 +766,396 @@ function viewToday() {
   h += info(`<div class="dolist"><div><h3>⭕ 하면 좋은 일</h3><ul class="ticks">${f.todo.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>
     <div><h3>❌ 피할 일</h3><ul class="ticks ticks--x">${f.avoid.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div></div>`, 'yellow');
   h += talk('coco', f.overall >= 58 ? 'happy' : 'wink', p(f.overall >= 72 ? `${rel}은 기운이 좋아요! 미뤄 둔 일 있으면 지금이에요!` : f.overall >= 58 ? `무난한 하루예요. ${f.lucky.color} 소품 하나로 기분 전환해 봐요!` : `조금 쉬어 가는 날이에요. ${f.bestBlock.label} 시간에 중요한 일만 끝내고 푹 쉬어요!`), { side: 'right', scene: 'pink' });
-  h += `<div class="actions"><a class="btn btn--pink" href="#chat">오늘 운세 상담하기</a><button class="btn" type="button" data-action="share-today">운세 공유하기</button><a class="btn btn--lilac" href="#reading">📖 내 사주 풀이 보기</a></div>`;
+  h += `<div class="actions"><a class="btn btn--pink" href="#chat">오늘 운세 상담하기</a><button class="btn" type="button" data-action="share-today">운세 공유하기</button>${cardBtn('today')}<a class="btn btn--lilac" href="#reading">📖 내 사주 풀이 보기</a></div>`;
   return h;
+}
+
+/* ───────────── 궁합 칸: 썸 확률 · 기념일 · 랭킹 ───────────── */
+
+function compatSwitch(mode) {
+  return switchNav('궁합 보기 선택', [['compat', '💞 궁합'], ['ssum', '💭 썸 확률'], ['anniv', '💍 기념일'], ['rank', '💯 랭킹']], mode).replace('class="modes"', 'class="modes modes--4"');
+}
+const cardBtn = (kind, label = '📸 결과 카드 저장') => `<button class="btn btn--yellow" type="button" data-card="${kind}">${label}</button>`;
+
+// 상대가 필요한 화면 공통: 프리셋 + 상대 부적 (없으면 안내)
+function needPartner(what) {
+  const a = me();
+  if (!a) {
+    return talk('coco', 'worry', p(`${what}을 보려면 먼저 <strong>내 사주</strong>부터 알려 줘야 해요!`), { side: 'right', scene: 'pink' })
+      + '<div class="actions"><a class="btn btn--pink" href="#start">내 정보 입력하러 가기</a></div>';
+  }
+  return null;
+}
+
+function ssum() {
+  const a = me(), b = partner();
+  if (!a || !b) return null;
+  if (!memo.ssum) memo.ssum = analyzeSsum(a, b);
+  return memo.ssum;
+}
+
+function viewSsum() {
+  let h = compatSwitch('ssum');
+  const stop = needPartner('썸 성공 확률');
+  if (stop) return h + stop;
+  const a = me();
+  h += talk('myo', 'smug', p(`${esc(a.name)}님, 썸 타는 사람이 있다고? 😼 그 사람 정보를 알려 주면 <strong>연애로 이어질 확률</strong>을 봐 줄게냥.`) + p('고백하기 좋은 날, 밀당 강도, 상대의 관심 신호까지 알려 줄게.'), { scene: 'lilac' });
+  h += partnerPresets();
+  h += talisman('partner', state.partner);
+  const r = ssum();
+  if (!r) return h;
+  const A = esc(r.a.name), B = esc(r.b.name);
+  let o = episode('썸편', `${A} → ${B}`);
+  o += talk('coco', 'surprise', p(`${A}님과 ${B}님이 연애로 이어질 확률은…!`), { side: 'right', scene: 'pink', sfx: '두근두근' });
+  o += `<section class="panel scene-speed"><div class="score">${riskHeart(r.prob, { label: '썸 성공', color: '#FF6FA8', seam: 'none' })}
+      <p class="score__grade">${r.stage.emoji} ${r.stage.title}</p><p class="score__line">${esc(r.stage.line)}</p></div></section>`;
+  o += info(`<h3>확률을 이렇게 계산했어요</h3>
+    <ul class="ticks ticks--plain"><li>💞 두 사람 궁합 <b>${r.compat}점</b></li><li>📅 이번 달 연애운 — ${A}님 <b>${r.monthA}</b> · ${B}님 <b>${r.monthB}</b></li></ul>
+    <h4>👍 확률을 올려 주는 것</h4><ul class="ticks">${r.plus.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
+    ${r.minus.length ? `<h4>🤏 조심할 것</h4><ul class="ticks ticks--x">${r.minus.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}`);
+  o += info(`<h3>💌 고백하기 좋은 날</h3><p>앞으로 45일 중 두 사람의 연애 기운이 함께 오르는 날이에요.</p>
+    <ul class="days">${r.confess.map((d) => `<li class="day"><b>${d.m}월 ${d.d}일</b><span>${d.wd}요일</span><small>두 사람 설렘 지수 ${Math.min(99, Math.round(d.v))}</small></li>`).join('')}</ul>`, 'mint');
+  o += info(`<h3>🎚️ ${B}님에게 맞는 밀당 강도</h3>
+    <div class="pushbar" role="img" aria-label="밀당 강도 5단계 중 ${r.push.level}단계">${[1, 2, 3, 4, 5].map((i) => `<span class="${i <= r.push.level ? 'is-on' : ''}"></span>`).join('')}</div>
+    <p class="style__type"><b>${r.push.level}단계 · ${r.push.label}</b></p><p>${esc(r.push.text)}</p>`, 'lilac');
+  o += info(`<h3>👀 ${B}님이 관심 있을 때 보이는 신호</h3><ul class="ticks">${r.signals.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
+    <p class="note">🙅 ${B}님에게 하면 안 되는 것: <b>${esc(r.dont)}</b></p>`, 'pink');
+  o += talk('myo', 'wink', `<p>다음 한 걸음은 이렇게 해 봐라냥.</p><ol class="ticks ticks--num">${r.steps.map((t) => `<li>${esc(t)}</li>`).join('')}</ol>`, { scene: 'night' });
+  o += info('<p class="disclaimer">🔮 <b>사주는 완벽하지 않아요.</b> 확률은 두 사람의 기운으로 본 "흐름"일 뿐이에요. 상대의 진짜 마음은 상대의 말과 행동에 있어요. 거절도 존중해 주세요.</p>');
+  o += `<div class="actions"><a class="btn btn--pink" href="#chat">썸 고민 상담하기</a>${cardBtn('ssum')}<a class="btn btn--lilac" href="#compat">💞 궁합 자세히 보기</a></div>`;
+  return h + `<div id="ssum-result">${o}</div>`;
+}
+
+function anniv() {
+  const a = me(), b = partner(), d = state.anniv;
+  if (!a || !b || !d) return null;
+  if (!memo.anniv) memo.anniv = analyzeAnniv(a, b, d);
+  return memo.anniv;
+}
+
+function viewAnniv() {
+  let h = compatSwitch('anniv');
+  const stop = needPartner('기념일 운세');
+  if (stop) return h + stop;
+  const a = me(), b = partner();
+  h += talk('coco', 'love', p('두 사람이 <strong>사귄 날</strong>을 알려 주세요! 그날의 기운으로 커플의 시작을 풀이하고, 다가오는 100일·주년 기념일 운세도 봐 드릴게요.'), { side: 'right', scene: 'pink' });
+  if (!b) {
+    h += partnerPresets();
+    h += talk('myo', 'think', p('먼저 연인 정보를 부적에 적어 줘냥.'), { scene: 'lilac' });
+    return h + talisman('partner', state.partner);
+  }
+  const d = state.anniv;
+  const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+  const val = d ? `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}` : '';
+  h += partnerPresets();
+  h += info(`<form class="annivform" data-form="anniv">
+      <h3>💍 ${esc(a.name)} ♥ ${esc(b.name)}</h3>
+      <div class="field"><label for="anniv-start">사귄 날 (1일째)</label><input class="input" id="anniv-start" type="date" name="start" value="${val}" max="${today}" min="1950-01-01" required></div>
+      <p class="form-error" role="alert"></p>
+      <div class="actions"><button class="btn btn--pink" type="submit">기념일 운세 보기</button>${d ? '<button class="btn" type="button" data-action="anniv-clear">🔄 초기화</button>' : ''}</div>
+    </form>`, 'paper');
+  const r = anniv();
+  if (!r) return h;
+  if (r.error) return h + info(`<p>${esc(r.error)}</p>`);
+  const A = esc(r.a.name), B = esc(r.b.name);
+  let o = episode('기념일편', `${A} ♥ ${B}`);
+  o += `<section class="panel scene-night"><div class="dcount"><small>함께한 지</small><b>${r.daysTogether.toLocaleString()}</b><span>일째</span>
+      <p>${r.start.y}년 ${r.start.m}월 ${r.start.d}일(${r.start.wd})부터</p></div></section>`;
+  o += talk('myo', 'smile', p(`두 사람은 <strong>${r.pillar.hanja}(${r.pillar.hangul})일</strong>, ${r.pillar.animal}의 날에 시작했다냥.`) + p(`그래서 <strong>${esc(r.theme.title)}</strong>야!`), { scene: 'lilac', caption: '시작한 날의 기운' });
+  o += info(`<h3>🌱 우리 커플의 시작 기운</h3><p>${esc(r.theme.text)}</p><ul class="ticks">${r.startNotes.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, 'mint');
+  o += info(`<h3>🎉 다가오는 기념일</h3><ul class="annivs">${r.upcoming.map((u) => `<li class="anniv lv-${u.grade.key}">
+      <div class="anniv__head"><b>${u.label}</b><span class="tag ${u.kind === 'year' ? 'tag--gold' : ''}">D-${u.dday || 'DAY'}</span></div>
+      <p class="anniv__date">${u.y}년 ${u.m}월 ${u.d}일(${u.wd}) · ${u.hanja}일</p>
+      <div class="meter"><span style="width:${u.score}%"></span></div>
+      <p class="anniv__line">${u.grade.emoji} 커플 연애운 <b>${u.score}</b> (${u.grade.label}) · 추천: ${esc(u.idea)}</p>
+    </li>`).join('')}</ul>${r.passed ? `<p class="note">지금까지 함께 지나온 기념일만 <b>${r.passed}번</b>이에요. 🥹</p>` : ''}`);
+  o += `<div class="actions">${cardBtn('anniv')}<a class="btn btn--lilac" href="#compat">💞 우리 궁합 보기</a><a class="btn" href="#breakup">💔 위기 시기 미리 보기</a></div>`;
+  return h + `<div id="anniv-result">${o}</div>`;
+}
+
+function rankList() {
+  const a = me();
+  if (!a) return [];
+  const meKey = personKey(state.me);
+  const people = state.presets.filter((x) => personKey(x.person) !== meKey).map((x) => ({ id: x.id, x: analyzeCached(x.person) })).filter((x) => x.x);
+  const key = meKey + '|' + people.map((x) => x.id).join(',');
+  if (memo.rankKey !== key) { memo.rank = rankCompat(a, people); memo.rankKey = key; }
+  return memo.rank;
+}
+
+function viewRank() {
+  let h = compatSwitch('rank');
+  const stop = needPartner('궁합 랭킹');
+  if (stop) return h + stop;
+  const a = me();
+  const list = rankList();
+  h += talk('myo', 'smug', p(`${esc(a.name)}님 프리셋에 저장된 사람들과의 궁합을 <strong>한 번에</strong> 줄 세워 봤다냥. 😼`), { scene: 'night' });
+  if (!list.length) {
+    return h + talk('coco', 'worry', p('아직 프리셋에 다른 사람이 없어요! 처음으로 화면에서 사람을 저장하면 여기서 순위를 볼 수 있어요.'), { side: 'right', scene: 'pink' })
+      + '<div class="actions"><a class="btn btn--pink" href="#start">📒 프리셋 저장하러 가기</a></div>';
+  }
+  const medal = ['🥇', '🥈', '🥉'];
+  const top = list.slice(0, 3);
+  let o = `<section class="panel scene-speed"><ol class="podium">${top.map((r, i) => `<li class="podium__item podium__item--${i + 1}">
+      <span class="podium__medal" aria-hidden="true">${medal[i]}</span><span class="podium__emoji" aria-hidden="true">${r.emoji}</span>
+      <b>${esc(r.name)}</b><span class="podium__score">${r.score}점</span><small>${r.grade.emoji} ${r.grade.title}</small></li>`).join('')}</ol></section>`;
+  o += info(`<h3>💯 ${esc(a.name)}님과의 궁합 순위</h3><ol class="ranks">${list.map((r, i) => `<li class="rank">
+      <span class="rank__no">${i < 3 ? medal[i] : i + 1}</span>
+      <div class="rank__body"><div class="rank__head"><b>${r.emoji} ${esc(r.name)}</b><span>${r.score}점 · ${r.grade.title}</span></div>
+        <div class="meter"><span style="width:${r.score}%"></span></div><small>${esc(r.best)}</small></div>
+      <button class="mini mini--pink" type="button" data-rank-open="${esc(r.id)}">자세히</button></li>`).join('')}</ol>
+    <p class="note">"자세히"를 누르면 그 사람과의 궁합 풀이로 바로 가요.</p>`);
+  o += talk('coco', 'wink', p(`1위는 <strong>${esc(top[0].name)}님</strong>이에요! 하지만 점수가 낮다고 인연이 아닌 건 아니에요. 맞춰 가는 사이도 멋지니까요!`), { side: 'right', scene: 'mint' });
+  o += `<div class="actions">${cardBtn('rank')}<a class="btn btn--lilac" href="#start">📒 사람 더 저장하기</a></div>`;
+  return h + `<div id="rank-result">${o}</div>`;
+}
+
+/* ───────────── 내 사주 칸: 이달 리포트 · 이상형 ───────────── */
+
+function monthNav(r) {
+  return `<div class="daynav" id="monthnav">
+    <button class="mini" type="button" data-month="${state.monthOffset - 1}" ${state.monthOffset <= -3 ? 'disabled' : ''} aria-label="지난달">◀ 지난달</button>
+    <div class="daynav__now"><b>${r.y}년 ${r.m}월</b><small>${state.monthOffset === 0 ? '이번 달' : state.monthOffset > 0 ? `${state.monthOffset}달 뒤` : `${-state.monthOffset}달 전`}</small></div>
+    <button class="mini" type="button" data-month="${state.monthOffset + 1}" ${state.monthOffset >= 11 ? 'disabled' : ''} aria-label="다음 달">다음 달 ▶</button>
+  </div>`;
+}
+function monthAt(offset) {
+  const n = new Date(Date.now() + 9 * 3600000);
+  const t = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth() + offset, 1));
+  return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1 };
+}
+function monthRep() {
+  const a = me();
+  if (!a) return null;
+  const { y, m } = monthAt(state.monthOffset);
+  const key = `${personKey(state.me)}|${y}-${m}`;
+  if (memo.monthKey !== key) { memo.month = monthReport(a, y, m); memo.monthKey = key; }
+  return memo.month;
+}
+
+function viewMonth() {
+  const a = me();
+  if (!a) return readingSwitch('month') + needPartner('이달의 연애 리포트');
+  const r = monthRep();
+  const n = esc(a.name);
+  let h = viewingBar(a) + readingSwitch('month') + monthNav(r);
+  h += talk('myo', r.avg >= 66 ? 'sparkle' : r.avg >= 56 ? 'smile' : 'think', p(`${n}님의 ${r.m}월 연애 흐름은 ${r.month.reason.emoji} <strong>${r.month.reason.label}</strong>이다냥.`) + p(esc(a.person.status === 'couple' ? r.month.reason.couple : r.month.reason.solo)), { scene: 'night', caption: `${r.y}년 ${r.m}월 · 월간 연애 리포트` });
+  const cells = Array.from({ length: r.firstWd }, () => '<li class="cal__blank" aria-hidden="true"></li>').join('')
+    + r.days.map((d) => `<li class="cal__day lv-${d.grade.key} ${d.isToday ? 'is-today' : ''}" title="${r.m}월 ${d.d}일 연애운 ${d.love}"><span class="cal__d">${d.d}</span><span class="cal__e" aria-hidden="true">${d.grade.emoji}</span><b>${d.love}</b></li>`).join('');
+  h += info(`<h3>🗓️ ${r.m}월 연애운 달력</h3><ul class="cal__wd" aria-hidden="true">${['일', '월', '화', '수', '목', '금', '토'].map((w) => `<li>${w}</li>`).join('')}</ul>
+    <ul class="cal" aria-label="${r.m}월 날짜별 연애운">${cells}</ul>
+    <p class="note">평균 <b>${r.avg}</b> · 설레는 날(💖 이상) <b>${r.goodCount}일</b> · 🔥최고 💖좋음 🙂보통 🌧️조심 🛌쉼표</p>`);
+  h += info(`<h3>📊 주차별 흐름</h3><ul class="weeks">${r.weekly.map((w) => `<li><div class="weeks__head"><b>${w.no}주차</b><small>${r.m}/${w.from}~${r.m}/${w.to}</small><span>${w.grade.emoji} ${w.avg}</span></div>
+      <div class="meter"><span style="width:${w.avg}%"></span></div><p>${esc(w.line)} <small>(가장 좋은 날 ${r.m}/${w.best})</small></p></li>`).join('')}</ul>`, 'lilac');
+  h += info(`<div class="dolist"><div><h3>💖 좋은 날</h3><ul class="ticks">${r.best.map((d) => `<li><b>${r.m}월 ${d.d}일</b> (${['일', '월', '화', '수', '목', '금', '토'][d.wd]}) · ${d.love}점</li>`).join('')}</ul></div>
+    <div><h3>🌧️ 조심할 날</h3><ul class="ticks ticks--x">${r.care.map((d) => `<li><b>${r.m}월 ${d.d}일</b> (${['일', '월', '화', '수', '목', '금', '토'][d.wd]}) · ${d.love}점</li>`).join('')}</ul></div></div>
+    <p class="note">💡 ${esc(r.month.reason.tip)}</p>`, 'yellow');
+  h += `<div class="actions">${cardBtn('month')}<a class="btn btn--lilac" href="#today">☀️ 오늘의 운세</a><a class="btn btn--pink" href="#chat">이달 연애운 상담하기</a></div>`;
+  return h;
+}
+
+function idealRes() {
+  const a = me();
+  if (!a) return null;
+  const meKey = personKey(state.me);
+  const people = state.presets.filter((x) => personKey(x.person) !== meKey).map((x) => ({ id: x.id, x: analyzeCached(x.person) })).filter((x) => x.x);
+  return findIdeal(a, people);
+}
+
+function viewIdeal() {
+  const a = me();
+  if (!a) return readingSwitch('ideal') + needPartner('이상형 찾기');
+  const r = idealRes();
+  const n = esc(a.name);
+  let h = viewingBar(a) + readingSwitch('ideal');
+  h += talk('coco', 'sparkle', p(`${n}님 사주만으로 <strong>나와 잘 맞는 사람</strong>을 찾아볼게요! 상대 정보는 필요 없어요.`), { side: 'right', scene: 'pink' });
+  h += info(`<h3>🔍 ${n}님과 잘 맞는 연애 캐릭터 TOP 3</h3><ol class="ideals">${r.types.map((t, i) => `<li class="ideal">
+      <span class="ideal__emoji" aria-hidden="true">${t.emoji}</span>
+      <div><p class="ideal__name"><b>${i + 1}. ${esc(t.cat)}</b> <span class="tile tile--sm el-${t.el}"><span class="hanja">${t.hanja}</span></span></p>
+      <p class="ideal__why">${esc(t.why)}</p><p class="note">${esc(t.nature)} · ${t.keywords.map((k) => `#${k}`).join(' ')}</p></div></li>`).join('')}</ol>
+    <p class="note">일간(태어난 날의 천간)이 ${r.types.map((t) => `${t.hanja}(${t.ko})`).join('·')}인 사람이에요. 상대 사주를 보면 바로 알 수 있어요.</p>`, 'lilac');
+  h += info(`<h3>💗 이런 성격에 끌려요</h3><ul class="ticks">${r.traits.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
+    <p class="note">사주 속 이상형 한 줄: ${esc(r.ideal)}</p>`, 'pink');
+  h += info(`<div class="dolist"><div><h3>🐾 잘 맞는 띠</h3><p class="bigtags">${r.goodZodiac.map((z) => `<span class="tag tag--gold">${z}띠</span>`).join('')}</p></div>
+    <div><h3>🙊 조심할 띠</h3><p class="bigtags">${r.cautionZodiac.map((z) => `<span class="tag">${z}띠</span>`).join('')}</p></div></div>
+    <p class="note">조심할 띠라도 노력하면 얼마든지 잘 맞아요. 처음에 오해만 조심!</p>`, 'mint');
+  h += info(`<h3>📍 이런 곳에서 만나기 쉬워요</h3><ul class="ticks">${r.meet.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, 'yellow');
+  if (r.matches.length) {
+    h += info(`<h3>📒 내 프리셋 중 이상형에 가까운 사람</h3><ul class="ranks">${r.matches.map((m) => `<li class="rank"><span class="rank__no">${m.emoji}</span>
+        <div class="rank__body"><b>${esc(m.name)}</b><small>${m.hits.map((x) => `✔ ${x}`).join(' · ')}</small></div>
+        <button class="mini mini--pink" type="button" data-rank-open="${esc(m.id)}">궁합 보기</button></li>`).join('')}</ul>`);
+  }
+  h += info('<p class="disclaimer">🔮 <b>사주는 완벽하지 않아요.</b> 사주로 본 "잘 맞을 가능성이 높은 유형"일 뿐이에요. 진짜 인연은 조건보다 함께 있을 때의 마음으로 알 수 있어요.</p>');
+  h += `<div class="actions">${cardBtn('ideal')}<a class="btn btn--pink" href="#chat">이상형 상담하기</a><a class="btn btn--lilac" href="#compat">💞 궁합 보러 가기</a></div>`;
+  return h;
+}
+
+/* ───────────── 🐱 캐릭터 호감도 ───────────── */
+
+const todayKey = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+function addAffinity(who, pts) {
+  const r = gainAffinity(state.affinity, who, pts, todayKey());
+  state.affinity = r.state;
+  store.set('affinity', state.affinity);
+  if (r.levelUp) {
+    const L = r.levelUp.level;
+    setTimeout(() => toast(`${L.emoji} ${CHARACTERS[who].name} 호감도 Lv.${L.lv} "${L.name}"! 새 표정이 열렸어요.`, { label: '보러 가기', fn: () => { location.hash = '#home'; setTimeout(() => document.getElementById('affinity')?.scrollIntoView({ block: 'start' }), 50); } }), 400);
+  }
+}
+// 하루 첫 방문 보너스
+function dailyVisit() {
+  const s = state.affinity || {};
+  if (s.visit === todayKey()) return;
+  addAffinity('myo', 3); addAffinity('coco', 3);
+  state.affinity = { ...state.affinity, visit: todayKey() };
+  store.set('affinity', state.affinity);
+}
+
+// 호감도 얼굴: 묘연은 얼굴 그림, 코코는 상반신 그림의 윗부분
+const affFace = (who, e) => (who === 'myo' ? faceAvatar('myo', e)
+  : `<span class="char char--face face-crop"><img src="img/expr/coco-${e}.webp" width="435" height="520" alt="" loading="lazy" decoding="async"></span>`);
+const EXPR_KO = { smile: '미소', happy: '신남', wink: '윙크', think: '고민', surprise: '깜짝', pout: '삐짐', sparkle: '반짝', smug: '의기양양', love: '두근', worry: '걱정' };
+function affinityCard() {
+  const s = state.affinity || {};
+  const one = (who) => {
+    const L = affinityLevel(s[who] || 0);
+    const open = unlockedExpr(L.lv);
+    const all = EXPR_UNLOCK.flat();
+    return `<div class="aff">
+      <div class="aff__head">${affFace(who, open[open.length - 1])}<div><p class="aff__name"><b>${CHARACTERS[who].name}</b> <span class="tag tag--now">Lv.${L.lv} ${L.emoji} ${L.name}</span></p>
+        <div class="meter meter--aff"><span style="width:${L.pct}%"></span></div>
+        <small>${L.next ? `다음 단계까지 ${L.toNext}점` : '최고 단계 달성!'} · 호감도 ${s[who] || 0}</small></div></div>
+      <p class="aff__line">“${esc(AFFINITY_LINES[who][L.lv])}”</p>
+      <ul class="exprs" aria-label="${CHARACTERS[who].name} 표정 도감">${all.map((e) => open.includes(e)
+    ? `<li>${affFace(who, e)}<small>${EXPR_KO[e]}</small></li>`
+    : `<li class="is-locked" aria-label="잠긴 표정"><span aria-hidden="true">🔒</span><small>Lv.${EXPR_UNLOCK.findIndex((g) => g.includes(e))}</small></li>`).join('')}</ul>
+    </div>`;
+  };
+  return `<div id="affinity">${info(`<h3>🐾 묘연·코코 호감도</h3><p class="note">하루 첫 방문 +3 · 상담 질문 +2(묘연) · 결과 보기 +1(코코), 하루 최대 12점씩 올라요. 레벨이 오르면 새 표정과 대사가 열려요!</p>
+    <div class="affs">${one('myo')}${one('coco')}</div>`, 'lilac')}</div>`;
+}
+
+/* ───────────── 📸 결과 카드 이미지 ───────────── */
+
+function cardSpec(kind) {
+  const a = me();
+  if (kind === 'compat') { const c = compat(); return c && { tag: '💞 궁합', title: `${c.a.name} ♥ ${c.b.name}`, score: c.score, unit: '점', grade: `${c.grade.emoji} ${c.grade.title}`, line: c.grade.line, bullets: c.strengths.slice(0, 3) }; }
+  if (kind === 'intimacy') { const r = intimacy(); return r && !r.blocked && { tag: '🔥 속궁합', title: `${r.a.name} ♥ ${r.b.name}`, score: r.score, unit: '점', grade: `${r.grade.emoji} ${r.grade.title}`, line: r.grade.line, bullets: [`${r.a.name}: ${r.styleA.type} · ${r.styleA.lead.label}`, `${r.b.name}: ${r.styleB.type} · ${r.styleB.lead.label}`, r.lead.type.title] }; }
+  if (kind === 'today') { if (!a) return null; const f = dailyFortune(a, Date.now(), state.dayOffset); return { tag: `☀️ ${f.date.m}월 ${f.date.d}일 운세`, title: `${a.name}님`, score: f.overall, unit: '점', grade: `${f.grade.emoji} ${f.grade.label} · ${f.theme.word}의 날`, line: f.theme.line, bullets: [`💗 연애운 ${f.cats[0].score}`, `🍀 행운 컬러: ${f.lucky.color}`, `⭐ 좋은 시간: ${f.bestBlock.label}`] }; }
+  if (kind === 'breakup') { const r = breakup(); return r && { tag: '💔 이별수', title: `${r.a.name} × ${r.b.name}`, score: r.risk, unit: '점', grade: `${r.grade.emoji} ${r.grade.title}`, line: r.grade.line, bullets: r.rules.slice(0, 3) }; }
+  if (kind === 'reunion') { const r = reunion(); return r && { tag: '💞 재회운', title: `${r.a.name} → ${r.b.name}`, score: r.score, unit: '점', grade: `${r.grade.emoji} ${r.grade.title}`, line: r.grade.line, bullets: [`다시 닿기 좋은 때: ${r.best[0].year}년 ${r.best[0].month}월`, `${r.b.name}님은 "${r.mind.type}"`] }; }
+  if (kind === 'ssum') { const r = ssum(); return r && { tag: '💭 썸 성공 확률', title: `${r.a.name} → ${r.b.name}`, score: r.prob, unit: '%', grade: `${r.stage.emoji} ${r.stage.title}`, line: r.stage.line, bullets: [`💌 고백 추천일: ${r.confess.map((d) => `${d.m}/${d.d}`).join(', ')}`, `🎚️ 밀당 강도: ${r.push.label}`] }; }
+  if (kind === 'anniv') { const r = anniv(); return r && !r.error && { tag: '💍 우리 기념일', title: `${r.a.name} ♥ ${r.b.name}`, score: r.daysTogether, unit: '일째', grade: r.theme.title, line: `${r.start.y}.${r.start.m}.${r.start.d} 시작 · ${r.pillar.hanja}일`, bullets: r.upcoming.slice(0, 3).map((u) => `${u.label} ${u.m}/${u.d} — 연애운 ${u.score}`) }; }
+  if (kind === 'rank') { const l = rankList(); return l.length && a && { tag: '💯 궁합 랭킹', title: `${a.name}님의 인연 순위`, score: l[0].score, unit: '점', grade: `🥇 ${l[0].name}님`, line: l[0].best, bullets: l.slice(0, 3).map((r, i) => `${['🥇', '🥈', '🥉'][i]} ${r.name} · ${r.score}점`) }; }
+  if (kind === 'month') { const r = monthRep(); return r && { tag: `🗓️ ${r.m}월 연애 리포트`, title: `${a.name}님`, score: r.avg, unit: '점', grade: `${r.month.reason.emoji} ${r.month.reason.label}`, line: `설레는 날 ${r.goodCount}일`, bullets: [`💖 좋은 날: ${r.best.map((d) => `${r.m}/${d.d}`).join(', ')}`, `🌧️ 조심할 날: ${r.care.map((d) => `${r.m}/${d.d}`).join(', ')}`] }; }
+  if (kind === 'ideal') { const r = idealRes(); return r && { tag: '🔍 사주 이상형', title: `${a.name}님의 이상형`, score: null, grade: `${r.types[0].emoji} ${r.types[0].cat}`, line: r.types[0].why, bullets: [`💗 ${r.traits[0]}`, `🐾 잘 맞는 띠: ${r.goodZodiac.join('·')}`, `📍 ${r.meet[0]}`] }; }
+  return null;
+}
+
+function wrapText(ctx, text, maxW) {
+  const lines = [];
+  let line = '';
+  for (const ch of String(text)) {
+    if (ctx.measureText(line + ch).width > maxW && line) { lines.push(line); line = ch.trim() ? ch : ''; } else line += ch;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+const loadImg = (src) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
+
+async function drawCard(spec) {
+  const W = 1080, H = 1350;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const D = '"Black Han Sans", "Apple SD Gothic Neo", sans-serif', B = '"Gowun Dodum", "Apple SD Gothic Neo", sans-serif';
+  try { await Promise.race([Promise.all([document.fonts.load(`60px ${D}`), document.fonts.load(`30px ${B}`)]), new Promise((r) => setTimeout(r, 1500))]); } catch { /* 기본 글꼴 */ }
+  const [myo, coco] = await Promise.all([loadImg('img/myo-full.webp'), loadImg('img/coco-full.webp')]);
+  // 배경
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#2A1B3D'); g.addColorStop(1, '#4B3470');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#ffffff88';
+  for (let i = 0; i < 70; i++) { const x = (i * 197) % W, y = (i * 331) % 300 + (i % 3) * 10; ctx.beginPath(); ctx.arc(x, y, (i % 3) + 1, 0, Math.PI * 2); ctx.fill(); }
+  // 머리
+  ctx.fillStyle = '#D7263D'; ctx.beginPath(); ctx.arc(110, 100, 44, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = `48px ${D}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('緣', 110, 102);
+  ctx.textAlign = 'left'; ctx.font = `46px ${D}`; ctx.fillText('묘연의 연애사주', 172, 102);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#F7D54A'; ctx.font = `52px ${D}`; ctx.fillText(spec.tag, W / 2, 200);
+  ctx.fillStyle = '#fff'; ctx.font = `64px ${D}`;
+  ctx.fillText(wrapText(ctx, spec.title, 940)[0], W / 2, 278);
+  // 판
+  const px = 60, py = 330, pw = 960, ph = 700;
+  ctx.fillStyle = '#2A1B3D'; roundRect(ctx, px + 10, py + 14, pw, ph, 40); ctx.fill();
+  ctx.fillStyle = '#FFF8FB'; roundRect(ctx, px, py, pw, ph, 40); ctx.fill();
+  ctx.lineWidth = 8; ctx.strokeStyle = '#2A1B3D'; ctx.stroke();
+  let y = py + 70;
+  if (spec.score != null) {
+    ctx.fillStyle = '#FF6FA8'; ctx.font = `200px ${D}`; ctx.textBaseline = 'alphabetic';
+    const num = String(spec.score);
+    const nw = ctx.measureText(num).width;
+    ctx.font = `60px ${D}`; const uw = ctx.measureText(spec.unit || '').width;
+    ctx.font = `200px ${D}`; ctx.textAlign = 'left';
+    const sx = W / 2 - (nw + uw + 10) / 2;
+    ctx.fillText(num, sx, py + 230);
+    ctx.fillStyle = '#2A1B3D'; ctx.font = `60px ${D}`; ctx.fillText(spec.unit || '', sx + nw + 10, py + 230);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    y = py + 300;
+  } else y = py + 110;
+  ctx.fillStyle = '#C2185B'; ctx.font = `56px ${D}`;
+  for (const l of wrapText(ctx, spec.grade, 880).slice(0, 2)) { ctx.fillText(l, W / 2, y); y += 66; }
+  ctx.fillStyle = '#2A1B3D'; ctx.font = `36px ${B}`;
+  for (const l of wrapText(ctx, spec.line || '', 860).slice(0, 2)) { ctx.fillText(l, W / 2, y); y += 50; }
+  y += 18;
+  ctx.strokeStyle = '#E7E0F2'; ctx.lineWidth = 4; ctx.setLineDash([14, 12]); ctx.beginPath(); ctx.moveTo(px + 60, y); ctx.lineTo(px + pw - 60, y); ctx.stroke(); ctx.setLineDash([]);
+  y += 50;
+  ctx.textAlign = 'left'; ctx.font = `34px ${B}`; ctx.fillStyle = '#3D2A5C';
+  for (const bl of (spec.bullets || []).slice(0, 3)) {
+    const ls = wrapText(ctx, `• ${bl}`, 840).slice(0, 2);
+    for (const l of ls) { if (y > py + ph - 30) break; ctx.fillText(l, px + 60, y); y += 46; }
+    y += 6;
+  }
+  // 캐릭터 (아래에서 빼꼼)
+  const peek = (im, x, w) => { if (!im) return; const h = (im.height / im.width) * w; ctx.drawImage(im, x, 1050, w, h); };
+  peek(myo, 20, 300); peek(coco, 760, 300);
+  ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.font = `40px ${D}`; ctx.fillText('나도 사주 보러 가기 🐾', W / 2, 1200);
+  ctx.fillStyle = '#CBBCEB'; ctx.font = `28px ${B}`; ctx.fillText('고양이 점술사의 웹툰 연애사주', W / 2, 1252);
+  return cv;
+}
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+async function openCard(kind) {
+  const spec = cardSpec(kind);
+  if (!spec) { toast('먼저 결과를 확인해 주세요!'); return; }
+  toast('📸 결과 카드를 그리는 중…');
+  const cv = await drawCard(spec);
+  const url = cv.toDataURL('image/png');
+  const file = `묘연-${kind}-${todayKey()}.png`;
+  document.querySelector('.cardview')?.remove();
+  const box = document.createElement('div');
+  box.className = 'cardview';
+  box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', '결과 카드');
+  box.innerHTML = `<div class="cardview__inner"><img src="${url}" alt="${esc(spec.tag)} 결과 카드: ${esc(spec.title)} ${spec.score ?? ''}${spec.unit || ''} ${esc(spec.grade)}">
+    <p class="note">휴대폰에서는 이미지를 길게 눌러 사진에 저장할 수도 있어요.</p>
+    <div class="actions"><a class="btn btn--pink" href="${url}" download="${file}">💾 이미지 저장</a><button class="btn btn--lilac" type="button" data-cv="share">📤 공유하기</button><button class="btn" type="button" data-cv="close">닫기</button></div></div>`;
+  document.body.appendChild(box);
+  box.querySelector('[data-cv="close"]').focus();
+  const close = () => box.remove();
+  box.addEventListener('click', async (ev) => {
+    if (ev.target === box || ev.target.closest('[data-cv="close"]')) { close(); return; }
+    if (ev.target.closest('[data-cv="share"]')) {
+      try {
+        const blob = await new Promise((r) => cv.toBlob(r, 'image/png'));
+        const f = new File([blob], file, { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f], title: '묘연의 연애사주' }); return; }
+      } catch (e) { if (e && e.name === 'AbortError') return; }
+      toast('이 기기에선 바로 공유가 안 돼요. 💾 저장 후 올려 주세요!');
+    }
+  });
+  box.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') close(); });
+  addAffinity('coco', 1);
 }
 
 /* ───────────── 화면: 궁합 ───────────── */
@@ -799,7 +1201,7 @@ function compatResultHtml(c) {
       <span class="rx__stamp" aria-hidden="true">緣</span>
     </div></section>`;
   h += talk('myo', 'smile', p('궁합은 정해진 답이 아니라 서로를 이해하는 힌트야. 더 궁금한 건 상담실로 와라냥.'), { scene: 'night' });
-  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 궁합으로 상담하기</a><button class="btn btn--lilac" type="button" data-action="new-partner">다른 사람과 궁합 보기</button><button class="btn" type="button" data-action="share-compat">궁합 공유하기</button><a class="btn" href="#intimacy">19금 속궁합 보기</a><button class="btn" type="button" data-action="breakup-from-compat">💔 이 커플 이별수 보기</button>${state.me && state.me.status === 'after' ? '<button class="btn" type="button" data-action="reunion-from-compat">💞 이 사람과 재회운 보기</button>' : ''}</div>`;
+  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 궁합으로 상담하기</a><button class="btn btn--lilac" type="button" data-action="new-partner">다른 사람과 궁합 보기</button><button class="btn" type="button" data-action="share-compat">궁합 공유하기</button>${cardBtn('compat')}<a class="btn" href="#ssum">💭 썸 성공 확률</a><a class="btn" href="#intimacy">19금 속궁합 보기</a><button class="btn" type="button" data-action="breakup-from-compat">💔 이 커플 이별수 보기</button>${state.me && state.me.status === 'after' ? '<button class="btn" type="button" data-action="reunion-from-compat">💞 이 사람과 재회운 보기</button>' : ''}</div>`;
   return h;
 }
 
@@ -810,7 +1212,7 @@ function viewCompat(mode = 'compat') {
     return talk('coco', 'worry', p(`${mode === 'intimacy' ? '속궁합' : '궁합'}을 보려면 먼저 <strong>내 사주</strong>부터 알려 줘야 해요!`), { side: 'right', scene: 'pink' })
       + `<div class="actions"><a class="btn btn--pink" href="#home">내 정보 입력하러 가기</a></div>`;
   }
-  let h = '';
+  let h = mode === 'intimacy' ? '' : compatSwitch('compat');
   h += mode === 'intimacy'
     ? talk('myo', 'smug', p(`${esc(a.name)}님, 여기는 어른들의 칸 <strong>19금</strong>이야. 😼`) + p('둘의 속궁합, 어울리는 분위기, 상대가 좋아할 스킨십과 귀여운 약점, 서로 마음을 여는 대화 카드까지 볼 수 있어. 두 사람 모두 <strong>만 19세 이상</strong>이어야 결과가 나와냥.'), { scene: 'night', caption: '19금 · 묘연 사주방 안쪽 방' })
     : talk('myo', 'smug', p(`${esc(a.name)}님, 궁합을 볼 상대가 있다고? 그 사람 정보를 부적에 적어 줘냥.`) + p('상대의 태어난 시간을 몰라도 괜찮아.'), { scene: 'lilac' });
@@ -932,7 +1334,7 @@ function intimacyResultHtml(r) {
   h += info(`<h3>💬 대화 카드</h3><p class="note">원하는 것·싫은 것은 말해야 알아요. 한 장씩 골라 서로에게 물어보세요.</p>
     <ul class="msgs talkcards">${r.cards.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, 'yellow');
   h += info(`<h3>✅ 동의·안전 체크리스트</h3><ul class="ticks">${r.consent.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, 'paper');
-  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 결과로 상담하기</a><a class="btn btn--lilac" href="#compat">💞 일반 궁합 보기</a><button class="btn" type="button" data-action="share-intimacy">결과 공유하기</button></div>`;
+  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 결과로 상담하기</a><a class="btn btn--lilac" href="#compat">💞 일반 궁합 보기</a><button class="btn" type="button" data-action="share-intimacy">결과 공유하기</button>${cardBtn('intimacy')}</div>`;
   return h;
 }
 
@@ -1124,7 +1526,7 @@ function breakupResultHtml(r) {
   // 에필로그
   h += talk('myo', 'smile', p('이별수가 있다고 꼭 헤어지는 게 아니고, 없다고 저절로 지켜지는 것도 아니야.') + p('약한 곳을 아는 커플이 제일 오래간다냥.'), { scene: 'night' });
   h += info('<p class="safety">💡 <b>꼭 기억해요.</b> 폭력·협박·통제·스토킹이 있는 관계라면 이별을 막는 게 답이 아니에요. 지금 안전이 먼저예요. 위험하면 <b>112</b>, 데이트폭력 상담은 <b>여성긴급전화 1366</b>(24시간).</p>', 'paper');
-  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 결과로 상담하기</a><button class="btn btn--lilac" type="button" data-action="pair-again">다른 두 사람 보기</button><button class="btn" type="button" data-action="share-breakup">결과 공유하기</button><a class="btn" href="#reunion">💞 같은 두 사람 재회운 보기</a></div>`;
+  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 결과로 상담하기</a><button class="btn btn--lilac" type="button" data-action="pair-again">다른 두 사람 보기</button><button class="btn" type="button" data-action="share-breakup">결과 공유하기</button>${cardBtn('breakup')}<a class="btn" href="#reunion">💞 같은 두 사람 재회운 보기</a></div>`;
   return h;
 }
 
@@ -1238,7 +1640,7 @@ function reunionResultHtml(r) {
   const nl = r.newLove.map((m) => `${monthName(m, base)}(${m.reason.label})`).join(', ');
   h += talk('myo', r.score < 40 ? 'worry' : 'think', p(r.score < 40 ? '솔직히 말하면, 지금은 다시 잇는 실보다 새로운 실이 더 가까이 있어 보여.' : '재회가 꼭 정답은 아니야. 그리움과 사랑은 다를 수 있거든.') + p(`${A}님에게 새 인연운이 좋은 달은 <strong>${nl}</strong>이야. 재회를 기다리느라 이 시기를 놓치지는 마냥.`), { scene: 'night' });
   h += info(`<p class="safety">💡 <b>이럴 땐 재회보다 나를 지키세요.</b><br>• 폭력·협박·통제·반복된 거짓말 때문에 헤어졌다면 다시 만나지 않는 게 맞아요. 위험하면 <b>112</b>, 데이트폭력 상담은 <b>여성긴급전화 1366</b>(24시간).<br>• 상대가 연락하지 말라고 했거나 차단했다면 그 뜻을 존중하세요. 거절 뒤에도 계속 연락하면 스토킹이 될 수 있어요.<br>• 재회를 생각할수록 내가 작아진다면, 지금 필요한 건 그 사람보다 나를 돌보는 시간이에요.</p>`, 'paper');
-  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 결과로 상담하기</a><a class="btn btn--lilac" href="#breakup">💔 같은 두 사람 이별수 보기</a><button class="btn" type="button" data-action="share-reunion">결과 공유하기</button><button class="btn" type="button" data-action="pair-again">다른 두 사람 보기</button></div>`;
+  h += `<div class="actions"><a class="btn btn--pink" href="#chat">이 결과로 상담하기</a><a class="btn btn--lilac" href="#breakup">💔 같은 두 사람 이별수 보기</a><button class="btn" type="button" data-action="share-reunion">결과 공유하기</button>${cardBtn('reunion')}<button class="btn" type="button" data-action="pair-again">다른 두 사람 보기</button></div>`;
   return h;
 }
 
@@ -1332,6 +1734,7 @@ async function ask(question) {
   if (!q) return;
   state.busy = true;
   state.chat.push({ role: 'user', content: q });
+  addAffinity('myo', 2);
   const log = document.getElementById('chat-log');
   log.insertAdjacentHTML('beforeend', meMsg({ content: q }));
   log.insertAdjacentHTML('beforeend', `<div class="msg msg--bot" id="typing"><div class="avatar">${faceAvatar('myo', 'think')}</div><div class="msg__bubble typing" aria-label="묘연이 답을 쓰는 중"><span></span><span></span><span></span></div></div>`);
@@ -1440,12 +1843,18 @@ const app = document.getElementById('app');
 
 function render() {
   const route = (location.hash || '#home').slice(1);
-  const tab = route === 'home' || route === 'start' ? 'start' : route === 'reunion' ? 'breakup' : route === 'today' ? 'reading' : route;
+  const TAB = { home: 'start', start: 'start', reunion: 'breakup', today: 'reading', month: 'reading', ideal: 'reading', ssum: 'compat', anniv: 'compat', rank: 'compat' };
+  const tab = TAB[route] || route;
   let html;
   if (route === 'reading') html = viewReading();
   else if (route === 'compat') html = viewCompat('compat');
   else if (route === 'intimacy') html = viewCompat('intimacy');
   else if (route === 'today') html = viewToday();
+  else if (route === 'month') html = viewMonth();
+  else if (route === 'ideal') html = viewIdeal();
+  else if (route === 'ssum') html = viewSsum();
+  else if (route === 'anniv') html = viewAnniv();
+  else if (route === 'rank') html = viewRank();
   else if (route === 'chat') html = viewChat();
   else if (route === 'breakup') html = viewBreakup('breakup');
   else if (route === 'reunion') html = viewBreakup('reunion');
@@ -1457,17 +1866,21 @@ function render() {
   });
   document.title = {
     reading: '내 연애 사주 — 묘연의 연애사주', compat: '궁합 — 묘연의 연애사주', chat: '상담실 — 묘연의 연애사주', breakup: '이별수 — 묘연의 연애사주', reunion: '재회운 — 묘연의 연애사주', intimacy: '19금 속궁합 — 묘연의 연애사주', today: '오늘의 운세 — 묘연의 연애사주',
+    month: '이달의 연애 리포트 — 묘연의 연애사주', ideal: '사주로 보는 이상형 — 묘연의 연애사주', ssum: '썸 성공 확률 — 묘연의 연애사주', anniv: '우리 기념일 운세 — 묘연의 연애사주', rank: '궁합 랭킹 — 묘연의 연애사주',
   }[route] || '묘연의 연애사주 — 고양이 점술사가 웹툰으로 풀어 주는 연애 사주·궁합';
   if (route === 'chat') scrollChat();
   if (route === 'start') {
     document.getElementById('start')?.scrollIntoView({ block: 'start' });
   } else if (pendingScroll && document.getElementById(pendingScroll)) {
     document.getElementById(pendingScroll).scrollIntoView({ block: 'start' });
-    if (['compat-result', 'breakup-result', 'reunion-result', 'intimacy-result'].includes(pendingScroll)) animateScore();
+    if (['compat-result', 'breakup-result', 'reunion-result', 'intimacy-result', 'ssum-result'].includes(pendingScroll)) animateScore();
   } else {
     window.scrollTo(0, 0);
   }
   pendingScroll = null;
+  // 결과 화면을 보면 코코 호감도 +1 (하루 한도 있음)
+  if (document.querySelector('#compat-result, #intimacy-result, #breakup-result, #reunion-result, #ssum-result, #anniv-result, #rank-result')
+    || (['today', 'month', 'ideal', 'reading'].includes(route) && me())) addAffinity('coco', 1);
 }
 let pendingScroll = null;
 
@@ -1511,6 +1924,17 @@ app.addEventListener('submit', (ev) => {
     const q = ta.value;
     ta.value = '';
     ask(q);
+    return;
+  }
+  if (kind === 'anniv') {
+    const v = form.querySelector('[name="start"]').value;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+    if (!m) { showError(form, { error: '사귄 날을 골라 주세요.', focus: 'start' }); return; }
+    const d = { y: +m[1], m: +m[2], d: +m[3] };
+    const t = new Date(Date.now() + 9 * 3600000);
+    if (Date.UTC(d.y, d.m - 1, d.d) > Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate())) { showError(form, { error: '사귄 날은 오늘이거나 오늘 이전이어야 해요.', focus: 'start' }); return; }
+    state.anniv = d; store.set('anniv', d); delete memo.anniv;
+    pendingScroll = 'anniv-result'; render();
     return;
   }
   const res = readForm(form);
@@ -1588,6 +2012,26 @@ app.addEventListener('click', (ev) => {
     render();
     return;
   }
+  const cardB = ev.target.closest('[data-card]');
+  if (cardB) { openCard(cardB.dataset.card); return; }
+  const rankOpen = ev.target.closest('[data-rank-open]');
+  if (rankOpen) {
+    const x = state.presets.find((it) => it.id === rankOpen.dataset.rankOpen);
+    if (!x || !analyzeCached(x.person)) return;
+    state.partner = { ...x.person };
+    resetMemo('partner');
+    store.set('partner', state.partner);
+    pendingScroll = 'compat-result';
+    if (location.hash === '#compat') render(); else location.hash = '#compat';
+    return;
+  }
+  const monBtn = ev.target.closest('[data-month]');
+  if (monBtn) {
+    state.monthOffset = Math.max(-3, Math.min(11, Number(monBtn.dataset.month) || 0));
+    pendingScroll = 'monthnav';
+    render();
+    return;
+  }
   const dayBtn = ev.target.closest('[data-day]');
   if (dayBtn) {
     state.dayOffset = Math.max(DAY_MIN, Math.min(DAY_MAX, Number(dayBtn.dataset.day) || 0));
@@ -1643,6 +2087,7 @@ app.addEventListener('click', (ev) => {
   if (action === 'share-reunion') { shareReunion(); return; }
   if (action === 'share-intimacy') { shareIntimacy(); return; }
   if (action === 'share-today') { shareToday(); return; }
+  if (action === 'anniv-clear') { state.anniv = null; store.del('anniv'); delete memo.anniv; render(); return; }
   if (action === 'adult-yes') { store.set(ADULT_KEY, true); render(); return; }
   if (action === 'reunion-from-compat') {
     if (!state.me || !state.partner) return;
@@ -1786,5 +2231,27 @@ function shareCompat() {
   if (!c) return;
   share(`🐾 묘연의 연애사주\n${c.a.name} ♥ ${c.b.name} 궁합 ${c.score}점, ${c.grade.title} ${c.grade.emoji}\n"${c.grade.line}"`);
 }
+
+
+/* ───────────── 🌙 다크 모드 ───────────── */
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  document.querySelectorAll('[data-theme-toggle]').forEach((b) => {
+    const inline = b.classList.contains('theme--inline');
+    b.textContent = t === 'dark' ? (inline ? '☀️ 밝게' : '☀️') : (inline ? '🌙 어둡게' : '🌙');
+    b.setAttribute('aria-label', t === 'dark' ? '밝은 화면으로 바꾸기' : '어두운 화면으로 바꾸기');
+  });
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', t === 'dark' ? '#140D1F' : '#2A1B3D');
+}
+applyTheme(store.get('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+document.addEventListener('click', (ev) => {
+  if (!ev.target.closest('[data-theme-toggle]')) return;
+  const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  store.set('theme', t);
+  applyTheme(t);
+  toast(t === 'dark' ? '🌙 어두운 화면으로 바꿨어요.' : '☀️ 밝은 화면으로 바꿨어요.');
+});
+
+dailyVisit();
 
 render();

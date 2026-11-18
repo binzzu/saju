@@ -229,3 +229,10 @@ export function summaryDailyForAI(f) {
   return `오늘(${f.date.y}-${f.date.m}-${f.date.d}, ${f.pillar.hanja}일)의 운세: 총운 ${f.overall}점(${f.grade.label}, 테마 "${f.theme.word}" — ${f.theme.line}) / ${f.cats.map((c) => `${c.label} ${c.score}`).join(', ')} / 좋은 시간 ${f.bestBlock.label}(${f.bestBlock.range}) / 행운 컬러 ${f.lucky.color}`;
 }
 
+
+/** 특정 날짜(서울 달력)의 점수 — 월간 리포트·기념일·고백 타이밍에서 쓴다 */
+export function dayScoresAt(a, y, m, d) {
+  const p = dayPillarOf(y, m, d);
+  const { sc, rel } = scoresFor(a, p.stem, p.branch);
+  return { ...sc, rel, god: tenGod(a.dm, p.stem), pillar: p };
+}

@@ -15,6 +15,9 @@ import { suggestQuestions, lastTopicOf, MORE } from '../public/js/suggest.js';
 import { createCounselor, detectTopic } from '../public/js/counsel.js';
 import { josa, renderRich } from '../public/js/text.js';
 import {
+  rankCompat, analyzeSsum, analyzeAnniv, monthReport, findIdeal, affinityLevel, unlockedExpr, gainAffinity,
+} from '../public/js/extras.js';
+import {
   PRESET_LIMIT, personKey, loadPresets, upsertPreset, removePreset, restorePreset, shortBirth,
 } from '../public/js/presets.js';
 
@@ -355,7 +358,7 @@ test('추천 질문: 시작·주제별 흐름·이미 물은 질문 제외·관�
   assert.ok(!s1.chips.includes('고백하기 좋은 날은?'));
   assert.ok(s1.chips.includes('고백 멘트 추천해 줘'));
   assert.ok(s1.chips.includes(MORE));
-  assert.equal(s1.link.href, '#reading');
+  assert.equal(s1.link.href, '#ssum');
   // "해결책 더" 바로 뒤에는 같은 칩을 다시 내지 않고, 주제는 앞 질문을 따른다
   const s2 = suggestQuestions({ status: 'some', asked: [...asked, MORE], topic: lastTopicOf([...asked, MORE]) });
   assert.ok(!s2.chips.includes(MORE));
@@ -394,4 +397,76 @@ test('추천 질문: 모든 추천 질문이 상담 주제로 인식된다', () 
       }
     }
   }
+});
+
+const person = (name, g, y, m, d, h) => analyzePerson({ name, gender: g, calendar: 'solar', year: y, month: m, day: d, hour: h, minute: 0, timeKnown: true });
+const NOW = Date.UTC(2026, 10, 18, 3);
+
+test('궁합 랭킹: 프리셋 사람들을 궁합 점수 높은 순으로 줄 세운다', () => {
+  const me = person('민지', 'F', 1997, 3, 14, 9);
+  const people = [['지수', 1995, 11, 2], ['현우', 1996, 6, 20], ['태민', 1994, 1, 8]].map(([n, y, m, d], i) => ({ id: 'p' + i, x: person(n, 'M', y, m, d, 12) }));
+  const r = rankCompat(me, people);
+  assert.equal(r.length, 3);
+  for (let i = 1; i < r.length; i++) assert.ok(r[i - 1].score >= r[i].score);
+  for (const x of r) { assert.equal(x.score, analyzeCompat(me, x.x).score); assert.ok(x.best && !x.best.includes('띠 ×')); }
+});
+
+test('썸 성공 확률: 12~96% 확률, 고백 추천일 3개(미래·날짜순), 밀당 1~5단계', () => {
+  const r = analyzeSsum(person('민지', 'F', 1997, 3, 14, 9), person('지수', 'M', 1995, 11, 2, 23), NOW);
+  assert.ok(r.prob >= 12 && r.prob <= 96);
+  assert.equal(r.confess.length, 3);
+  const n = (d) => Date.UTC(d.y, d.m - 1, d.d);
+  assert.ok(n(r.confess[0]) > NOW - 86400000);
+  for (let i = 1; i < 3; i++) assert.ok(n(r.confess[i - 1]) < n(r.confess[i]));
+  assert.ok(r.push.level >= 1 && r.push.level <= 5 && r.push.label);
+  assert.equal(r.signals.length, 3);
+  assert.ok(r.plus.length >= 1 && r.steps.length === 3);
+});
+
+test('기념일 운세: 함께한 날 수, 시작 일진, 다가오는 기념일 5개', () => {
+  const a = person('민지', 'F', 1997, 3, 14, 9), b = person('지수', 'M', 1995, 11, 2, 23);
+  const r = analyzeAnniv(a, b, { y: 2025, m: 9, d: 1 }, NOW);
+  assert.equal(r.daysTogether, 444); // 2025-09-01이 1일째 → 2026-11-18은 444일째
+  assert.equal(r.pillar.hanja.length, 2);
+  assert.equal(r.upcoming.length, 5);
+  assert.equal(r.upcoming[0].label, '500일');
+  assert.deepEqual([r.upcoming[0].y, r.upcoming[0].m, r.upcoming[0].d], [2027, 1, 13]);
+  assert.ok(r.upcoming.some((u) => u.label === '2주년' && u.m === 9 && u.d === 1));
+  for (let i = 1; i < 5; i++) assert.ok(r.upcoming[i - 1].dday <= r.upcoming[i].dday);
+  assert.match(analyzeAnniv(a, b, { y: 2030, m: 1, d: 1 }, NOW).error, /오늘/);
+});
+
+test('이달의 연애 리포트: 날짜 수만큼 칸, 주차·좋은 날·조심할 날', () => {
+  const r = monthReport(person('민지', 'F', 1997, 3, 14, 9), 2026, 2, NOW);
+  assert.equal(r.days.length, 28);
+  assert.equal(r.weekly.reduce((s, w) => s + (w.to - w.from + 1), 0), 28);
+  assert.equal(r.best.length, 3); assert.equal(r.care.length, 3);
+  assert.ok(Math.min(...r.best.map((d) => d.love)) >= Math.max(...r.care.map((d) => d.love)));
+  assert.equal(r.firstWd, new Date(Date.UTC(2026, 1, 1)).getUTCDay());
+});
+
+test('이상형 찾기: 천간합 짝이 1순위, 띠, 프리셋 중 가까운 사람', () => {
+  const me = person('민지', 'F', 1997, 3, 14, 9);
+  const people = [['지수', 1995, 11, 2], ['현우', 1996, 6, 20], ['태민', 1994, 1, 8], ['서준', 1998, 9, 30]].map(([n, y, m, d], i) => ({ id: 'p' + i, x: person(n, 'M', y, m, d, 12) }));
+  const r = findIdeal(me, people);
+  assert.equal(r.types.length, 3);
+  assert.equal(r.types[0].stem, (me.dm + 5) % 10);
+  assert.ok(!r.goodZodiac.includes(me.animal));
+  assert.ok(r.goodZodiac.every((z) => !r.cautionZodiac.includes(z)));
+  assert.ok(r.matches.length <= 3 && r.matches.every((m) => m.hits.length));
+});
+
+test('호감도: 단계·해금 표정·하루 한도', () => {
+  assert.equal(affinityLevel(0).lv, 0);
+  assert.equal(affinityLevel(10).lv, 1);
+  assert.equal(affinityLevel(500).lv, 5);
+  assert.equal(unlockedExpr(0).length, 2);
+  assert.equal(unlockedExpr(5).length, 10);
+  let s = null; let total = 0; let ups = 0;
+  for (let i = 0; i < 20; i++) { const r = gainAffinity(s, 'myo', 2, '2026-11-18'); s = r.state; total += r.gained; if (r.levelUp) ups++; }
+  assert.equal(total, 12); // 하루 최대 12점
+  assert.equal(ups, 1);
+  const next = gainAffinity(s, 'myo', 2, '2026-11-19');
+  assert.equal(next.gained, 2);
+  assert.equal(next.state.coco, 0);
 });
