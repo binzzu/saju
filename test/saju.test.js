@@ -293,6 +293,11 @@ test('속궁합: 다섯 항목 100점 만점, 스타일·달·분위기 처방�
   assert.ok(r.tips.length >= 3);
   assert.match(summaryIntimacyForAI(r), /속궁합/);
   assert.match(detectTopic('우리 속궁합 어때?'), /intimacy/);
+  // 상대의 마음을 여는 법: 사주로 고른 상위 3개, 근거 문장 포함
+  for (const list of [r.openA, r.openB]) {
+    assert.equal(list.length, 3);
+    for (const o of list) { assert.ok(o.stars >= 1 && o.stars <= 3); assert.match(o.why, /님은 /); assert.doesNotMatch(o.why, /사주이라|형이라 이 방법/); }
+  }
 });
 
 test('속궁합: 두 사람 중 한 명이라도 만 19세 미만이면 결과를 만들지 않는다', () => {

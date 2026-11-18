@@ -5,7 +5,7 @@ import {
   ELEMENTS, ELEMENT_KO, STEMS, BRANCHES, BRANCHES_KO, RED_FLAME,
   branchRelation, stemsCombine, generates, peachBlossomBranch, yearMonthPillarsAt, seoulWallToUtc, dayPillarOf, hourPillarOf,
 } from './saju.js';
-import { WEEKDAYS } from './text.js';
+import { WEEKDAYS, josa } from './text.js';
 import { ELEMENT_INFO, periodLove } from './reading.js';
 
 export const ADULT_AGE = 19;
@@ -64,6 +64,49 @@ export const TALK_CARDS = [
   '다음에 둘이 꼭 가 보고 싶은 분위기 좋은 곳은?',
   '내가 어떤 말을 해 줄 때 제일 설레?',
 ];
+
+// 상대의 마음을 여는 행동 후보 — 상대의 오행·십신 성향·리드 성향·온도에 맞는 태그로 점수를 매겨 상위 3개만 보여 준다
+const OPEN_ACTS = [
+  { act: '진심을 담은 칭찬 한마디 먼저 건네기', tags: ['fire', '식상', 'weak'] },
+  { act: '이야기를 끝까지 들어 주고 "그랬구나"로 공감하기', tags: ['water', '인성', 'cool'] },
+  { act: '함께한 좋은 추억을 사진 한 장과 함께 꺼내기', tags: ['인성', 'wood'] },
+  { act: '작은 약속도 시간 맞춰 정확히 지키기', tags: ['metal', '관성', '재성'] },
+  { act: '집 데이트나 느긋한 산책처럼 편안한 시간 만들기', tags: ['earth', 'cool', '인성'] },
+  { act: '상대가 좋아한다고 했던 것을 기억했다가 깜짝 준비하기', tags: ['wood', '재성', '식상'] },
+  { act: '데이트 결정을 상대에게 맡기고 기분 좋게 따라가 주기', tags: ['strong', '비겁'] },
+  { act: '"이번엔 내가 준비할게" 하고 먼저 계획 세워 주기', tags: ['weak', 'earth'] },
+  { act: '서툴러도 손편지나 긴 메시지로 마음 전하기', tags: ['water', '관성', 'metal'] },
+  { act: '처음 가 보는 곳에서 새로운 경험 함께하기', tags: ['fire', 'wood', '식상', 'hot'] },
+  { act: '다른 사람 앞에서 상대를 자랑하고 편들어 주기', tags: ['비겁', 'fire', '관성'] },
+  { act: '서두르지 않고 상대의 속도에 맞춰 기다려 주기', tags: ['cool', 'water', 'metal', 'weak'] },
+];
+const OPEN_WHY = {
+  wood: '새싹형이라 설렘과 성장을 함께 느낄 때', fire: '불꽃형이라 솔직하고 활기찬 표현에', earth: '포근형이라 편안함과 안정감에',
+  metal: '보석형이라 믿음과 정돈된 태도에', water: '물결형이라 감성과 깊은 대화에',
+  인성: '지난 일을 오래 기억하는 사주', 비겁: '자존심을 중요하게 여기는 사주', 식상: '표현에 반응이 빠른 사주',
+  재성: '현실적인 마음을 가진 사주', 관성: '책임과 약속을 중시하는 사주',
+  strong: '먼저 이끌고 싶어 하는 리드형', weak: '상대에게 맞춰 주는 맞춤형', hot: '뜨거운 기운이 강한 커플', cool: '차분한 기운이 강한 커플',
+};
+
+/** to(상대)의 마음을 여는 법 — 사주로 가능성이 높은 3가지 */
+export function openHeart(to, tempKey) {
+  const group = Object.keys(to.groupCounts).sort((x, y) => to.groupCounts[y] - to.groupCounts[x])[0];
+  const mine = new Set([to.dmEl, group, to.strength.key, tempKey]);
+  const W = { [to.dmEl]: 3, [group]: 3, [to.strength.key]: 2, [tempKey]: 1 };
+  const ranked = OPEN_ACTS.map((o) => {
+    const hit = o.tags.filter((t) => mine.has(t));
+    return { act: o.act, score: hit.reduce((t, h) => t + (W[h] || 0), 0), hit };
+  }).filter((x) => x.score > 0).sort((x, y) => y.score - x.score || OPEN_ACTS.findIndex((o) => o.act === x.act) - OPEN_ACTS.findIndex((o) => o.act === y.act));
+  return ranked.slice(0, 3).map((x) => {
+    const main = [...x.hit].sort((p, q) => (W[q] || 0) - (W[p] || 0))[0];
+    const phrase = OPEN_WHY[main];
+    return {
+      act: x.act,
+      stars: x.score >= 5 ? 3 : x.score >= 3 ? 2 : 1,
+      why: main === to.dmEl ? `${to.name}님은 ${phrase} 마음이 열리는 사람이에요.` : `${to.name}님은 ${josa(phrase, '이라', '라')} 이 방법이 잘 통해요.`,
+    };
+  });
+}
 
 export const CONSENT = [
   '둘 다 원할 때만 — 한 사람이라도 망설이면 멈추기',
@@ -240,10 +283,12 @@ export function analyzeIntimacy(a, b, nowMs = Date.now()) {
     .sort((p, q) => q.v - p.v)[0];
 
   const touch = (x) => ({ likes: TOUCH_LIKES[x.dmEl], soft: SOFT_SPOTS[x.dmEl] });
+  const tempKey = p3.key === 'hot' || p3.key === 'cool' ? p3.key : '';
 
   return {
     blocked: false, a, b, parts, raw, score, grade, styleA, styleB, strengths, cautions, tips, moodEl, mood, months, hot, rest,
     goodDates, goodWeekday, goodHour, touchA: touch(a), touchB: touch(b), cards: TALK_CARDS, consent: CONSENT,
+    openB: openHeart(b, tempKey), openA: openHeart(a, tempKey),
   };
 }
 

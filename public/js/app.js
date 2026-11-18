@@ -889,6 +889,13 @@ function intimacyResultHtml(r) {
       <p class="note">→ ${esc(from.name)}님이 기억해 두세요!</p>
     </div>`;
   h += info(`<h3>💗 상대가 좋아할 스킨십 · 귀여운 약점</h3><div class="styles">${touchCard(r.b, r.a, r.touchB)}${touchCard(r.a, r.b, r.touchA)}</div>`, 'lilac');
+  const openCard = (to, from, list) => `<div class="style">
+      <p class="style__type">🗝️ <b>${esc(to.name)}님</b>의 마음을 여는 법 <small class="note">— ${esc(from.name)}님께</small></p>
+      <ol class="opens">${list.map((o) => `<li><span class="opens__stars" aria-label="가능성 ${o.stars}단계">${'★'.repeat(o.stars)}${'☆'.repeat(3 - o.stars)}</span> <b>${esc(o.act)}</b><br><small>${esc(o.why)}</small></li>`).join('')}</ol>
+    </div>`;
+  h += info(`<h3>🗝️ 상대의 마음을 여는 법</h3><p class="note">사주로 가능성이 가장 높은 3가지만 골랐어요.</p>
+    <div class="styles">${openCard(r.b, r.a, r.openB)}${openCard(r.a, r.b, r.openA)}</div>
+    <p class="disclaimer">🔮 <b>사주는 완벽하지 않아요.</b> 태어난 순간의 기운으로 본 "가능성이 높은 흐름"일 뿐, 사람의 마음은 사주보다 훨씬 다양해요. 진짜 답은 상대에게 직접 물어보는 거예요. 아래 대화 카드를 활용해 보고, 상대가 원하지 않는 표현은 아무리 잘 맞는다고 나와도 멈춰 주세요.</p>`, 'pink');
   h += talk('coco', 'love', `<p>두 사람의 좋은 점!</p><ul class="ticks">${r.strengths.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, { side: 'right', scene: 'mint' });
   h += talk('myo', 'think', `<p>이건 맞춰 가야 한다냥.</p><ul class="ticks">${r.cautions.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`, { scene: 'lilac' });
   h += info(`<h3>🔥 설렘 지수가 높은 달</h3>${intimacyMonths(r)}<ul class="ticks ticks--plain">${r.hot.map((m) => `<li><b>🔥 ${monthName(m, base)}</b> — ${esc(m.why.slice(0, 2).join(' / ') || '두 사람의 연애운이 함께 오르는 달')}. 특별한 데이트는 이때!</li>`).join('')}<li><b>🫖 ${monthName(r.rest, base)}</b> — 서로 피곤하기 쉬운 달이에요. 무리한 이벤트보다 편안한 휴식 데이트로.</li></ul>`);
