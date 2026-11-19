@@ -715,7 +715,7 @@ function viewReading() {
 /* ───────────── 화면: 오늘의 운세 ───────────── */
 
 function readingSwitch(mode) {
-  return switchNav('내 사주 보기 선택', [['reading', '📖 사주 풀이'], ['today', '☀️ 오늘 운세'], ['month', '🗓️ 이달 리포트'], ['ideal', '🔍 이상형'], ['future', '🔮 미래 연인']], mode).replace('class="modes"', 'class="modes modes--5"');
+  return switchNav('내 사주 보기 선택', [['reading', '📖 사주 풀이'], ['today', '☀️ 오늘 운세'], ['month', '🗓️ 이달 리포트'], ['ideal', '🔍 이상형']], mode).replace('class="modes"', 'class="modes modes--4"');
 }
 
 const DAY_MIN = -7, DAY_MAX = 30;
@@ -988,7 +988,7 @@ function viewIdeal() {
         <button class="mini mini--pink" type="button" data-rank-open="${esc(m.id)}">궁합 보기</button></li>`).join('')}</ul>`);
   }
   h += info('<p class="disclaimer">🔮 <b>사주는 완벽하지 않아요.</b> 사주로 본 "잘 맞을 가능성이 높은 유형"일 뿐이에요. 진짜 인연은 조건보다 함께 있을 때의 마음으로 알 수 있어요.</p>');
-  h += `<div class="actions">${cardBtn('ideal')}<a class="btn btn--pink" href="#future">🔮 미래의 연인 보기</a><a class="btn" href="#chat">이상형 상담하기</a><a class="btn btn--lilac" href="#compat">💞 궁합 보러 가기</a></div>`;
+  h += `<div class="actions">${cardBtn('ideal')}<a class="btn btn--pink" href="#future">🔮 미리 인연 보기</a><a class="btn" href="#chat">이상형 상담하기</a><a class="btn btn--lilac" href="#compat">💞 궁합 보러 가기</a></div>`;
   return h;
 }
 
@@ -1003,15 +1003,15 @@ function future() {
 
 function viewFuture() {
   const a = me();
-  if (!a) return readingSwitch('future') + needPartner('미래의 연인');
+  if (!a) return needPartner('미리 인연');
   const r = future();
   const n = esc(a.name), W = r.word;
-  let h = viewingBar(a) + readingSwitch('future');
+  let h = viewingBar(a);
   h += `<div class="fwant" role="group" aria-label="보고 싶은 연인"><span>보고 싶은 연인:</span>
     <button class="mini ${r.gender === 'M' ? 'mini--pink' : ''}" type="button" data-future-want="M" aria-pressed="${r.gender === 'M'}">👦 남자친구</button>
     <button class="mini ${r.gender === 'F' ? 'mini--pink' : ''}" type="button" data-future-want="F" aria-pressed="${r.gender === 'F'}">👧 여자친구</button></div>`;
   h += talk('myo', 'smug', p(`${n}님 사주 속 <strong>인연의 별(${r.elName} 기운)</strong>과 <strong>배우자 자리</strong>를 수정 구슬에 비춰 볼게냥. 🔮`) + p(`미래의 ${W}, 슬쩍 보여 줄게.`), { scene: 'night', caption: '묘연의 수정 구슬' });
-  let o = episode('미래 연인편', `${n}님의 미래 ${W}`);
+  let o = episode('미리 인연편', `${n}님의 미래 ${W}`);
   o += `<section class="panel scene-lilac"><div class="future">
       <div class="future__pic">${futureAvatar(r)}</div>
       <p class="future__cat">${r.cat.emoji} <b>${esc(r.cat.name)}</b> 타입</p>
@@ -1026,6 +1026,9 @@ function viewFuture() {
       <div class="luck__row"><dt>스타일</dt><dd>${r.look.style}</dd></div>
       <div class="luck__row"><dt>체형</dt><dd>${r.look.body}</dd></div>
     </dl><p class="note">얼굴과 머리는 인연의 별(${r.elName}), 분위기·스타일·체형은 배우자 자리(${r.palaceName}) 기운으로 그렸어요. 그림은 느낌만 보여 주는 거예요!</p>`);
+  o += info(`<h3>🧍 체형 자세히</h3><p class="fbody__sum">키 <b>${r.height.mid}cm</b> 전후 · ${esc(r.look.body)}</p>
+    <dl class="luck fbody">${r.look.bodyDetail.map((x) => `<div class="luck__row"><dt>${x.label}</dt><dd>${esc(x.text)}</dd></div>`).join('')}</dl>
+    <p class="note">체형은 배우자 자리(${r.palaceName}) 기운으로 본 느낌이에요. 실제 모습은 사람마다 달라요.</p>`, 'mint');
   o += info(`<div class="fstats">
       <div class="fstat"><small>키</small><b>${r.height.mid}<span>cm</span></b><span class="fstat__sub">${r.height.min}~${r.height.max}cm</span></div>
       <div class="fstat"><small>MBTI</small><b>${r.mbti.type}</b><span class="fstat__sub">또는 ${r.mbti.alt}</span></div>
@@ -1903,7 +1906,7 @@ const app = document.getElementById('app');
 
 function render() {
   const route = (location.hash || '#home').slice(1);
-  const TAB = { home: 'start', start: 'start', reunion: 'breakup', today: 'reading', month: 'reading', ideal: 'reading', future: 'reading', ssum: 'compat', anniv: 'compat', rank: 'compat' };
+  const TAB = { home: 'start', start: 'start', reunion: 'breakup', today: 'reading', month: 'reading', ideal: 'reading', future: 'future', ssum: 'compat', anniv: 'compat', rank: 'compat' };
   const tab = TAB[route] || route;
   let html;
   if (route === 'reading') html = viewReading();
@@ -1927,7 +1930,7 @@ function render() {
   });
   document.title = {
     reading: '내 연애 사주 — 묘연의 연애사주', compat: '궁합 — 묘연의 연애사주', chat: '상담실 — 묘연의 연애사주', breakup: '이별수 — 묘연의 연애사주', reunion: '재회운 — 묘연의 연애사주', intimacy: '19금 속궁합 — 묘연의 연애사주', today: '오늘의 운세 — 묘연의 연애사주',
-    month: '이달의 연애 리포트 — 묘연의 연애사주', ideal: '사주로 보는 이상형 — 묘연의 연애사주', future: '미래의 연인 — 묘연의 연애사주', ssum: '썸 성공 확률 — 묘연의 연애사주', anniv: '우리 기념일 운세 — 묘연의 연애사주', rank: '궁합 랭킹 — 묘연의 연애사주',
+    month: '이달의 연애 리포트 — 묘연의 연애사주', ideal: '사주로 보는 이상형 — 묘연의 연애사주', future: '미리 인연 — 묘연의 연애사주', ssum: '썸 성공 확률 — 묘연의 연애사주', anniv: '우리 기념일 운세 — 묘연의 연애사주', rank: '궁합 랭킹 — 묘연의 연애사주',
   }[route] || '묘연의 연애사주 — 고양이 점술사가 웹툰으로 풀어 주는 연애 사주·궁합';
   if (route === 'chat') scrollChat();
   if (route === 'start') {

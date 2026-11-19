@@ -19,6 +19,30 @@ const BODY = {
   wood: '키가 커 보이는 늘씬하고 길쭉한 체형', fire: '활동적이고 탄탄한 건강미 체형', earth: '포근하고 볼륨감 있는 글래머러스한 체형',
   metal: '군더더기 없이 균형 잡힌 슬림 체형', water: '선이 부드럽고 유연한 체형',
 };
+// 체형 자세히 — 배우자 자리 오행 × 성별. 실루엣·어깨·몸의 선·팔다리·느낌·자세·잘 어울리는 옷
+const BODY_ROWS = [['silhouette', '실루엣'], ['shoulder', '어깨'], ['line', '몸의 선'], ['limbs', '팔다리'], ['tone', '느낌'], ['posture', '자세·걸음'], ['fit', '어울리는 옷']];
+const BODY_DETAIL = {
+  wood: {
+    M: { silhouette: '키에 비해 마른 듯 길쭉한 일자형', shoulder: '넓지는 않지만 곧게 펴진 직각 어깨', line: '군살 없이 곧은 허리선이라 셔츠가 툭 떨어지는 핏', limbs: '팔다리가 길고 손가락이 가늘어요', tone: '잔근육이 살짝 있는 슬림 탄탄형', posture: '등이 곧고 성큼성큼 걸어요', fit: '롱코트·와이드 슬랙스' },
+    F: { silhouette: '가늘고 길쭉한 일자형', shoulder: '가녀린 직각 어깨와 긴 목선', line: '허리가 가늘고 전체적으로 슬림한 라인', limbs: '다리가 길어서 비율이 좋아 보여요', tone: '가볍고 산뜻한 슬림형', posture: '목과 등이 곧아 실제 키보다 커 보여요', fit: '롱스커트·와이드 팬츠' },
+  },
+  fire: {
+    M: { silhouette: '어깨가 발달한 역삼각형', shoulder: '넓고 다부진 어깨', line: '가슴과 등이 탄탄하고 허리가 잘록해요', limbs: '팔뚝과 종아리에 운동한 티가 나요', tone: '활동적인 운동형 근육질', posture: '가슴을 펴고 활기차게 걸어요', fit: '반팔 티·트레이닝 셋업' },
+    F: { silhouette: '탄탄하고 건강미 있는 균형형', shoulder: '작지만 반듯한 어깨', line: '복부가 탄탄하고 허리선이 또렷해요', limbs: '매끈하고 탄력 있는 팔다리', tone: '필라테스·러닝이 어울리는 건강미', posture: '발걸음이 가볍고 생기 있어요', fit: '크롭 니트·애슬레저룩' },
+  },
+  earth: {
+    M: { silhouette: '듬직하고 포근한 곰돌이형', shoulder: '두툼하고 넓은 어깨', line: '몸통이 두툼해서 안기면 푸근해요', limbs: '굵고 힘 있는 팔', tone: '살짝 통통하지만 힘이 센 체형', posture: '느긋하고 안정감 있게 걸어요', fit: '오버핏 후드·두꺼운 니트' },
+    F: { silhouette: '부드럽고 볼륨감 있는 글래머러스형', shoulder: '둥글고 부드러운 어깨선', line: '허리는 잘록하고 골반 라인이 또렷한 곡선 실루엣', limbs: '말랑하고 부드러운 팔', tone: '포근하고 여성스러운 볼륨감', posture: '차분하고 여유롭게 걸어요', fit: '허리 라인이 드러나는 원피스·니트' },
+  },
+  metal: {
+    M: { silhouette: '군더더기 없는 슬림 탄탄형', shoulder: '각진 직각 어깨', line: '허리가 가늘고 몸의 선이 깔끔해요', limbs: '마디가 또렷한 손과 곧은 다리', tone: '마른 근육형', posture: '자세가 반듯하고 절도 있어요', fit: '셋업 수트·슬림 코트' },
+    F: { silhouette: '균형 잡힌 슬림형', shoulder: '반듯한 어깨와 또렷한 쇄골 라인', line: '허리가 가늘고 몸의 선이 정돈된 느낌', limbs: '곧고 가는 팔다리', tone: '단단하고 깔끔한 슬림', posture: '꼿꼿한 자세로 또각또각 걸어요', fit: '셔츠·H라인 스커트' },
+  },
+  water: {
+    M: { silhouette: '선이 부드러운 슬림형', shoulder: '살짝 둥근 어깨', line: '마른 듯 부드러운 몸의 선', limbs: '길고 섬세한 손', tone: '근육보다 유연함이 돋보이는 체형', posture: '천천히 조용조용 걸어요', fit: '루즈핏 셔츠·가디건' },
+    F: { silhouette: '부드러운 곡선의 유연한 체형', shoulder: '가녀리고 둥근 어깨', line: '허리에서 골반으로 이어지는 부드러운 곡선', limbs: '하얗고 가는 손목', tone: '말랑하고 여리여리한 느낌', posture: '물 흐르듯 사뿐사뿐 걸어요', fit: '플리츠 스커트·실크 블라우스' },
+  },
+};
 // 키 (cm 범위의 가운데) — 인연의 별 오행 + 배우자 자리 기운
 const HEIGHT = { M: { wood: 181, fire: 178, earth: 175, metal: 177, water: 174 }, F: { wood: 167, fire: 164, earth: 161, metal: 164, water: 160 } };
 
@@ -62,6 +86,7 @@ export function futurePartner(a, want, nowMs = Date.now()) {
   const look = {
     face: L.face, eyes: L.eyes, hair: L.hair[g], vibe: P.vibe, style: P.style,
     body: BODY[palaceEl], el, palaceEl,
+    bodyDetail: BODY_ROWS.map(([k, label]) => ({ key: k, label, text: BODY_DETAIL[palaceEl][g][k] })),
   };
 
   // 키

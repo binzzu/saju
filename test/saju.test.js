@@ -477,6 +477,8 @@ test('미래의 연인: 생김새·키·MBTI·나이·만나는 때와 곳, 성�
   const r = futurePartner(a, undefined, NOW);
   assert.equal(r.gender, 'M'); // 기본은 나와 다른 성별
   for (const k of ['face', 'eyes', 'hair', 'vibe', 'style', 'body']) assert.ok(r.look[k], k);
+  assert.equal(r.look.bodyDetail.length, 7);
+  for (const row of r.look.bodyDetail) assert.ok(row.label && row.text, row.key);
   assert.ok(r.height.min >= 165 && r.height.max <= 190 && r.height.max - r.height.min === 4);
   assert.match(r.mbti.type, /^[EI][SN][TF][JP]$/);
   assert.match(r.mbti.alt, /^[EI][SN][TF][JP]$/);
