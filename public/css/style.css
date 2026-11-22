@@ -990,3 +990,47 @@ html[data-theme="dark"] .fbody__sum b { color: #FF9EC4; }
   .tabs a { padding: 5px 5px; font-size: 12.5px; }
   .logo__mark { width: 30px; height: 30px; font-size: 16px; }
 }
+
+/* ───────── 결혼운 ───────── */
+#marriage-result { scroll-margin-top: 64px; }
+.myears { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.myears li { display: grid; grid-template-columns: 70px 1fr 30px; align-items: center; gap: 8px; padding: 3px 6px; border-radius: 10px; }
+.myears__y { font-family: var(--f-display); font-size: var(--s-3); line-height: 1.1; }
+.myears__y small { display: block; font-family: var(--f-body); font-size: 11px; color: var(--muted); }
+.myears li b { font-family: var(--f-display); font-weight: 400; text-align: right; }
+.myears li.is-best { background: #FFF0F6; }
+.myears li.is-best .myears__y::after { content: ' 💍'; font-size: 13px; }
+.myears li.is-best .meter > span { background: var(--blush); }
+.myears li.is-avoid .meter > span { background: var(--lilac); }
+.myears li.is-avoid .myears__y::after { content: ' 🌧️'; font-size: 13px; }
+html[data-theme="dark"] .myears li.is-best { background: #4A2440; }
+
+/* ───────── 첫 만남 ───────── */
+.meetline { display: grid; gap: 4px; }
+.meetline p { margin: 0 !important; }
+.meetline__who { font-size: var(--s-1); color: var(--muted); }
+.meetline__q, .meetline__a { padding: 10px 14px; border: 2.5px solid var(--ink); border-radius: 18px; background: var(--paper); font-size: var(--s-3); margin-bottom: 6px !important; }
+.meetline__q { border-top-left-radius: 4px; }
+.meetline__a { border-top-right-radius: 4px; background: #FFE3EE; justify-self: end; }
+html[data-theme="dark"] :is(.meetline__q, .meetline__a) { --ink: #2A1B3D; color: #2A1B3D; }
+
+/* ───────── 초대 링크 ───────── */
+#invitebox { scroll-margin-top: 64px; }
+.invite__out { margin-top: 12px; }
+.invite__url { font-size: 13px; margin-top: 4px; }
+
+/* ───────── 오늘의 고양이 카드 ───────── */
+.catcard { display: grid; justify-items: center; gap: 4px; width: min(100%, 300px); margin: 4px auto 0; padding: 16px 14px; border: 3px solid var(--ink); border-radius: 18px; background: var(--paper); box-shadow: 0 5px 0 var(--ink); text-align: center; }
+.catcard--back { cursor: pointer; min-height: 170px; align-content: center; font: inherit; color: #fff; background: radial-gradient(circle at 30% 20%, #6B4C9A, var(--night)); background-image: radial-gradient(circle at 30% 20%, #6B4C9A, var(--night)); }
+.catcard--back span { font-size: 44px; line-height: 1; }
+.catcard--back b { font-family: var(--f-display); font-weight: 400; font-size: var(--s-5); color: var(--talisman); }
+.catcard--back small { color: #E9E1FF; }
+.catcard--back:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--ink); }
+.catcard__emoji { font-size: 46px; line-height: 1.1; }
+.catcard__name { margin: 0 !important; font-family: var(--f-display); font-size: var(--s-5); color: #C2185B; }
+.catcard__word { margin: 4px 0 !important; font-size: var(--s-3); }
+.catcard__do { margin: 0 !important; font-size: var(--s-2); }
+.catcard.is-flip { animation: catflip .6s ease both; }
+@keyframes catflip { from { transform: perspective(600px) rotateY(90deg); } to { transform: perspective(600px) rotateY(0); } }
+@media (prefers-reduced-motion: reduce) { .catcard.is-flip { animation: none; } }
+html[data-theme="dark"] .catcard.is-open { --ink: #2A1B3D; --muted: #5B4A72; color: #2A1B3D; }

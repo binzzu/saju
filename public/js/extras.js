@@ -274,3 +274,14 @@ export function gainAffinity(state, who, pts, todayKey) {
   return { state: s, gained, levelUp: after > before ? { who, level: affinityLevel(s[who]) } : null };
 }
 
+
+/* ───────────── 상담실용 요약 ───────────── */
+export function summaryExtrasForAI({ ssum, anniv, month, ideal, rank } = {}) {
+  const out = [];
+  if (ssum) out.push(`썸 성공 확률: ${ssum.a.name} → ${ssum.b.name} ${ssum.prob}% (${ssum.stage.title}) / 고백 추천일 ${ssum.confess.map((d) => `${d.m}/${d.d}`).join(', ')} / 밀당 ${ssum.push.level}단계 "${ssum.push.label}"`);
+  if (anniv && !anniv.error) out.push(`기념일: ${anniv.start.y}.${anniv.start.m}.${anniv.start.d} 시작, ${anniv.daysTogether}일째, "${anniv.theme.title}" / 다가오는 기념일 ${anniv.upcoming.slice(0, 3).map((u) => `${u.label}(${u.m}/${u.d}, 연애운 ${u.score})`).join(', ')}`);
+  if (month) out.push(`${month.m}월 연애 리포트: 평균 ${month.avg}, 좋은 날 ${month.best.map((d) => `${month.m}/${d.d}`).join(', ')}, 조심할 날 ${month.care.map((d) => `${month.m}/${d.d}`).join(', ')}`);
+  if (ideal) out.push(`사주 이상형: ${ideal.types.map((t) => `${t.cat}(${t.hanja})`).join(', ')} / 잘 맞는 띠 ${ideal.goodZodiac.join('·')}`);
+  if (rank && rank.length) out.push(`프리셋 궁합 랭킹: ${rank.slice(0, 5).map((r, i) => `${i + 1}위 ${r.name} ${r.score}점`).join(', ')}`);
+  return out.join('\n');
+}

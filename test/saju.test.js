@@ -17,7 +17,10 @@ import { josa, renderRich } from '../public/js/text.js';
 import {
   rankCompat, analyzeSsum, analyzeAnniv, monthReport, findIdeal, affinityLevel, unlockedExpr, gainAffinity,
 } from '../public/js/extras.js';
-import { futurePartner, futureAvatar } from '../public/js/future.js';
+import { futurePartner, futureAvatar, firstMeetScene, similarPresets, summaryFutureForAI } from '../public/js/future.js';
+import { analyzeMarriage, summaryMarriageForAI } from '../public/js/marriage.js';
+import { encodeInvite, decodeInvite, makeIcs, makeBackup, parseBackup, CAT_CARDS, dailyCardIndex } from '../public/js/tools.js';
+import { summaryExtrasForAI } from '../public/js/extras.js';
 import {
   PRESET_LIMIT, personKey, loadPresets, upsertPreset, removePreset, restorePreset, shortBirth,
 } from '../public/js/presets.js';
@@ -494,4 +497,89 @@ test('미래의 연인: 생김새·키·MBTI·나이·만나는 때와 곳, 성�
   assert.match(futureAvatar(f), /^<svg[^>]+xmlns/);
   // 같은 사주면 언제나 같은 결과
   assert.deepEqual(futurePartner(a, 'M', NOW).look, r.look);
+});
+
+test('결혼운: 10년, 좋은 해 3개(날짜순), 가장 좋은 해, 상대가 있으면 결혼 궁합', () => {
+  const a = person('민지', 'F', 1997, 3, 14, 9), b = person('지수', 'M', 1995, 11, 2, 23);
+  const r = analyzeMarriage(a, b, NOW);
+  assert.equal(r.years.length, 10);
+  assert.equal(r.best.length, 3);
+  for (let i = 1; i < 3; i++) assert.ok(r.best[i - 1].year < r.best[i].year);
+  assert.equal(r.top.score, Math.max(...r.years.filter((y) => y.age >= 20).map((y) => y.score)));
+  assert.ok(r.tips.some((t) => t.includes(`${r.top.year}년`)));
+  assert.ok(!r.best.some((y) => y.year === r.avoid.year));
+  assert.ok(r.withPartner && r.withPartner.score >= 40 && r.withPartner.score <= 99);
+  assert.equal(analyzeMarriage(a, null, NOW).withPartner, null);
+  assert.match(summaryMarriageForAI(r), /결혼운/);
+});
+
+test('미리 인연: 첫 만남 장면과 닮은 프리셋, 상담용 요약', () => {
+  const a = person('민지', 'F', 1997, 3, 14, 9);
+  const r = futurePartner(a, 'M', NOW);
+  const s = firstMeetScene(r);
+  for (const k of ['caption', 'time', 'where', 'place', 'notice', 'theirLine', 'myLine', 'sign']) assert.ok(s[k], k);
+  const people = [['서준', 'M', 1998, 9, 30], ['지아', 'F', 1998, 9, 30], ['현우', 'M', 1996, 6, 20]].map(([n, g, y, m, d], i) => ({ id: 'p' + i, x: person(n, g, y, m, d, 18) }));
+  const sim = similarPresets(r, people);
+  assert.ok(sim.every((x) => x.hits.length >= 2 && x.name !== '지아')); // 다른 성별은 제외
+  assert.match(summaryFutureForAI(r), /미리 인연/);
+});
+
+test('궁합 초대 링크: 출생 정보만 담기고 그대로 되살아난다', () => {
+  const p = { name: '민지', gender: 'F', calendar: 'lunar', leap: true, year: 1997, month: 3, day: 14, hour: 9, minute: 20, timeKnown: true, status: 'couple' };
+  const code = encodeInvite(p);
+  assert.match(code, /^[A-Za-z0-9_-]+$/);
+  const back = decodeInvite(code);
+  assert.deepEqual({ ...back }, { name: '민지', gender: 'F', calendar: 'lunar', leap: true, year: 1997, month: 3, day: 14, hour: 9, minute: 20, timeKnown: true });
+  assert.equal(back.status, undefined); // 연애 상태는 넣지 않는다
+  assert.equal(decodeInvite('이상한값'), null);
+  assert.equal(decodeInvite(encodeInvite({ ...p, timeKnown: false })).timeKnown, false);
+});
+
+test('캘린더 파일: 종일 일정, 다음 날 끝, 특수문자 이스케이프', () => {
+  const ics = makeIcs([{ title: '고백, 좋은 날; 화이팅', y: 2026, m: 12, d: 31, desc: '줄1\n줄2' }], NOW);
+  assert.match(ics, /^BEGIN:VCALENDAR\r\n/);
+  assert.match(ics, /DTSTART;VALUE=DATE:20261231\r\n/);
+  assert.match(ics, /DTEND;VALUE=DATE:20270101\r\n/);
+  assert.match(ics, /SUMMARY:고백\\, 좋은 날\\; 화이팅/);
+  assert.match(ics, /END:VCALENDAR\r\n$/);
+});
+
+test('백업: 저장한 값만 되살리고 이상한 값은 걸러낸다', () => {
+  const store = { me: { name: '민지', gender: 'F', calendar: 'solar', year: 1997, month: 3, day: 14, timeKnown: false, status: 'solo' }, presets: [{ id: 'a', person: { name: '지수', gender: 'M', year: 1995, month: 11, day: 2 } }], anniv: { y: 2025, m: 9, d: 1 }, affinity: { myo: 30, coco: 5 }, theme: 'dark' };
+  const b = makeBackup((k) => store[k] ?? null, NOW);
+  const back = parseBackup(JSON.stringify(b));
+  assert.equal(back.me.name, '민지');
+  assert.equal(back.presets.length, 1);
+  assert.deepEqual(back.anniv, { y: 2025, m: 9, d: 1 });
+  assert.equal(back.affinity.myo, 30);
+  assert.equal(back.theme, 'dark');
+  assert.equal(parseBackup('{"app":"other","v":1,"data":{}}'), null);
+  assert.equal(parseBackup('not json'), null);
+  const evil = parseBackup(JSON.stringify({ app: 'myoyeon-saju', v: 1, data: { theme: '<script>', affinity: { myo: -5, coco: 1e9 }, me: { name: 'x' } } }));
+  assert.equal(evil.theme, undefined); assert.equal(evil.me, undefined);
+  assert.equal(evil.affinity.myo, 0); assert.equal(evil.affinity.coco, 9999);
+});
+
+test('오늘의 고양이 카드: 같은 사람·같은 날은 같은 카드', () => {
+  assert.ok(CAT_CARDS.length >= 20);
+  const i = dailyCardIndex('민지', '2026-11-22');
+  assert.equal(dailyCardIndex('민지', '2026-11-22'), i);
+  assert.ok(i >= 0 && i < CAT_CARDS.length);
+  const days = new Set(Array.from({ length: 30 }, (_, d) => dailyCardIndex('민지', `2026-12-${d + 1}`)));
+  assert.ok(days.size >= 8); // 날마다 골고루 바뀐다
+});
+
+test('상담실: 새 결과(미리 인연·기념일·결혼운·썸)를 답에 반영한다', () => {
+  const a = person('민지', 'F', 1997, 3, 14, 9), b = person('지수', 'M', 1995, 11, 2, 23);
+  const ctx = {
+    a, fc: buildForecast(a, NOW), compat: analyzeCompat(a, b), ssum: analyzeSsum(a, b, NOW), anniv: analyzeAnniv(a, b, { y: 2025, m: 9, d: 1 }, NOW),
+    future: futurePartner(a, 'M', NOW), marriage: analyzeMarriage(a, b, NOW),
+  };
+  const c = createCounselor(() => ctx);
+  assert.match(c.respond('미래의 남친은 어떻게 생겼어?').text, /MBTI/);
+  assert.match(c.respond('100일 기념일 뭐하지').text, /444일째/);
+  assert.match(c.respond('결혼운 알려줘').text, /결혼운 화면으로 보면/);
+  assert.match(c.respond('고백하기 좋은 날은?').text, /썸 성공 확률로 보면/);
+  assert.match(summaryExtrasForAI({ ssum: ctx.ssum, anniv: ctx.anniv }), /썸 성공 확률.*\n기념일/);
+  assert.equal(detectTopic('미리 인연 알려줘'), 'future');
 });

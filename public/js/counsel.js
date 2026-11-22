@@ -16,9 +16,11 @@ const TOPICS = [
   { id: 'conflict', words: ['싸움', '싸웠', '싸워', '싸우', '다퉜', '다툼', '갈등', '서운', '화해', '삐졌', '지루', '식었', '잔소리'] },
   { id: 'trust', words: ['바람', '외도', '의심', '질투', '집착', '불안', '양다리'] },
   { id: 'confession', words: ['고백', '썸', '짝사랑', '좋아하는 사람', '호감', '관심 있는', '관심있는', '플러팅', '마음을 전', '좋아하는데'] },
-  { id: 'marriage', words: ['결혼', '배우자', '청혼', '프로포즈', '프러포즈', '신혼', '웨딩', '상견례'] },
+  { id: 'marriage', words: ['결혼운', '결혼', '배우자', '청혼', '프로포즈', '프러포즈', '신혼', '웨딩', '상견례'] },
   { id: 'contact', words: ['연락', '카톡', '답장', '문자', '밀당', '읽씹', '안읽씹', 'dm', '디엠'] },
   { id: 'date', words: ['소개팅', '데이트', '첫만남', '첫 만남', '미팅', '장소', '어디서', '어디 가', '선 보'] },
+  { id: 'anniv', words: ['기념일', '100일', '200일', '300일', '주년', '사귄 날', '사귄지', '사귄 지'] },
+  { id: 'future', words: ['미래의 남친', '미래의 여친', '미래 남친', '미래 여친', '미래의 연인', '미래 연인', '미리 인연', '미래의 남자', '미래의 여자', '생김새', '어떻게 생겼', '키는', 'mbti', '엠비티아이'] },
   { id: 'intimacy', words: ['속궁합', '스킨십', '잠자리', '19금', '첫날밤'] },
   { id: 'compat', words: ['궁합', '그 사람', '그사람', '우리 커플', '우리 둘', '상대방', '잘 맞을', '잘 될까', '잘될까'] },
   { id: 'age', words: ['연상', '연하', '나이 차', '나이차', '동갑'] },
@@ -150,9 +152,37 @@ export function starterChips(status) {
   return ['애인은 언제 생길까?', '내 이상형은?', '내 연애 문제점은?', '소개팅 잘 되는 법'];
 }
 
+// 썸 확률 결과가 있으면 고백 답변 끝에 덧붙인다
+function withSsum(out, ssum) {
+  if (!ssum) return out;
+  out.text += `\n\n💭 **썸 성공 확률로 보면** ${ssum.b.name}님과 연애로 이어질 확률은 **${ssum.prob}%** (${ssum.stage.emoji} ${ssum.stage.title}). 고백 추천일은 ${ssum.confess.map((d) => `${d.m}/${d.d}`).join(', ')}이고, ${ssum.b.name}님에겐 "${ssum.push.label}"이 맞아요.`;
+  return out;
+}
+
 /* ───────────── 주제별 답변 ───────────── */
 
 const HANDLERS = {
+  future(ctx) {
+    const { future } = ctx;
+    if (!future) return HANDLERS.fallback(ctx);
+    const r = future;
+    return {
+      text: `수정 구슬에 미래의 ${r.word}를 비춰 봤다냥! 🔮\n\n🔮 **사주로 보면**\n• 생김새: ${r.look.face}, ${r.look.eyes}, ${r.look.hair}\n• 분위기: ${r.look.vibe} · 체형: ${r.look.body}\n• 키 ${r.height.min}~${r.height.max}cm · MBTI ${r.mbti.type}(또는 ${r.mbti.alt}) · ${r.age.gap}\n• 만나는 때: **${r.when.year}년 ${r.when.month}월** (${r.when.season})\n• 만나는 곳: ${r.meets.map((m) => m.where).join(', ')}\n\n💡 **해결책**\n• 그 달에는 들어오는 약속을 웬만하면 수락하기\n• ${r.meets[0].detail}\n• 그때를 위해 지금은 나를 가꾸는 시간을 늘리기\n\n사주는 완벽하지 않아요. 재미로 봐 주고, 진짜 인연은 마음이 먼저 알아본다냥.`,
+      expr: 'smug', chips: ['그 사람 어디서 만나?', '내 이상형은?', '애인은 언제 생길까?'],
+    };
+  },
+
+  anniv({ a, anniv }) {
+    if (!anniv || anniv.error) {
+      return { text: `기념일 운세가 궁금하구나냥! 💍\n\n궁합 칸의 **💍 기념일**에서 사귄 날을 알려 주면, 시작한 날의 기운과 다가오는 100일·주년 기념일 운세를 봐 줄게.`, expr: 'smile', chips: ['우리 커플 궁합은?', '데이트 장소 추천해 줘'] };
+    }
+    const u = anniv.upcoming[0];
+    return {
+      text: `함께한 지 벌써 **${anniv.daysTogether}일째**다냥! 🥹\n\n🔮 **사주로 보면**\n두 사람은 ${anniv.pillar.hanja}일에 시작한 "${anniv.theme.title}"이에요. ${anniv.theme.text}\n\n🎉 **다가오는 기념일**\n${anniv.upcoming.slice(0, 3).map((x) => `• ${x.label} — ${x.m}월 ${x.d}일(${x.wd}) · 커플 연애운 ${x.score} · 추천: ${x.idea}`).join('\n')}\n\n💡 **해결책**\n• ${u.label}에는 "${u.idea}"를 준비해 보세요.\n• 기념일엔 선물보다 지난 시간을 돌아보는 편지가 오래 남아요.`,
+      expr: 'love', chips: ['우리 커플 궁합은?', '데이트 장소 추천해 줘', '결혼은 언제쯤?'],
+    };
+  },
+
   safety() {
     return {
       text: '그 이야기를 꺼내 줘서 고마워요. 이건 사주보다 **지금 당신의 안전**이 훨씬 중요한 문제다냥.\n\n• 위험한 상황이라면 바로 **112**에 신고하세요.\n• 데이트 폭력·스토킹 상담: **여성긴급전화 1366** (24시간)\n• 마음이 너무 힘들 땐: **자살예방상담전화 109** (24시간)\n\n혼자 견디지 않아도 돼요. 믿을 수 있는 사람에게도 꼭 알려 주세요. 여기서 이야기를 더 나누고 싶다면 언제든 들을게요.',
@@ -184,7 +214,7 @@ const HANDLERS = {
     };
   },
 
-  timing({ a, fc, status }) {
+  timing({ a, fc, status, future }) {
     const cur = fc.current.sajuYear;
     const [b1, b2] = fc.best;
     const couple = status === 'couple';
@@ -195,7 +225,7 @@ const HANDLERS = {
       ? `${a.name}님은 원래 사주에 인연의 별이 숨어 있는 타입이라, 운에서 그 별이 들어오는 달에 인연이 확 들어와요.`
       : a.partner.text;
     return {
-      text: `${head}\n\n🔮 **사주로 보면**\n앞으로 12개월 중 ${couple ? '관계운' : '인연운'}이 가장 반짝이는 때는 **${monthName(b1, cur)}**(${b1.score}점 · ${b1.reason.label}), 그다음은 **${monthName(b2, cur)}**(${b2.score}점 · ${b2.reason.label})이에요. ${couple ? b1.reason.couple : b1.reason.solo}\n${partnerLine}\n\n💡 **해결책**\n• ${monthName(b1, cur)} 전에 미리 판을 깔아 두세요: ${couple ? '여행이나 기념일 계획 세우기' : '모임 참석, 지인에게 소개 부탁하기'}\n• 인연을 부르는 장소: ${a.luck.places.slice(0, 2).join(', ')}\n• ${b1.reason.tip}\n• 행운 컬러 **${a.luck.color}** 소품으로 기운 끌어올리기`,
+      text: `${head}\n\n🔮 **사주로 보면**\n앞으로 12개월 중 ${couple ? '관계운' : '인연운'}이 가장 반짝이는 때는 **${monthName(b1, cur)}**(${b1.score}점 · ${b1.reason.label}), 그다음은 **${monthName(b2, cur)}**(${b2.score}점 · ${b2.reason.label})이에요. ${couple ? b1.reason.couple : b1.reason.solo}\n${partnerLine}\n\n💡 **해결책**\n• ${monthName(b1, cur)} 전에 미리 판을 깔아 두세요: ${couple ? '여행이나 기념일 계획 세우기' : '모임 참석, 지인에게 소개 부탁하기'}\n• 인연을 부르는 장소: ${a.luck.places.slice(0, 2).join(', ')}\n• ${b1.reason.tip}\n• 행운 컬러 **${a.luck.color}** 소품으로 기운 끌어올리기` + (future && !couple ? `\n\n🔮 **미리 인연으로 보면** ${future.when.year}년 ${future.when.month}월쯤, "${future.meets[0].where}"에서 만날 가능성이 커요. (미리 인연 칸에서 생김새까지 볼 수 있어요!)` : ''),
       expr: 'smug', chips: ['그 달에 뭘 하면 좋아?', '내 이상형은?', '고백하기 좋은 날은?'],
     };
   },
@@ -286,18 +316,18 @@ const HANDLERS = {
     };
   },
 
-  confession({ a, fc }) {
+  confession({ a, fc, ssum }) {
     const how = CONFESS_HOW[a.dm];
     const days = luckyDays(a, 30);
     const cur = fc.current.sajuYear;
     const goodMonth = fc.months.find((m) => m.good.some((k) => ['output', 'peach', 'partner', 'jeong', 'stemCombo'].includes(k))) || fc.best[0];
-    return {
+    return withSsum({
       text: `두근두근, 고백 작전이다냥! 💌\n\n🔮 **사주로 보면**\n${a.profile.emoji} ${a.profile.cat} 타입인 ${a.name}님은 — ${how}\n흐름상 마음을 전하기 좋은 달은 **${monthName(goodMonth, cur)}**이에요. (${goodMonth.reason.emoji} ${goodMonth.reason.label})\n\n📅 **앞으로 30일 중 고백 길일**\n${days.map((d) => `• ${dayLabel(d)} — ${d.reason.emoji} ${d.reason.label}`).join('\n')}\n\n💡 **해결책**\n• 장소: ${CONFESS_PLACE[a.dmEl]}\n• 고백 전 2주는 단둘이 만나는 횟수를 자연스럽게 늘리기\n• 행운 컬러 **${a.luck.color}** 아이템을 하나 착용하기\n• 거절이 두렵다면 "부담 갖지 말고 생각해 줘"를 꼭 덧붙이기`,
       expr: 'love', chips: ['연락은 어떻게 해야 해?', '그 사람과 궁합은?', '고백 멘트 추천해 줘'],
-    };
+    }, ssum);
   },
 
-  marriage({ a, fc }) {
+  marriage({ a, fc, marriage }) {
     const years = [...fc.years].sort((x, y) => y.score - x.score);
     const marry = fc.years.filter((y) => y.good.includes('jeong') || y.good.includes('harmony'));
     const pickYears = (marry.length ? marry : years).slice(0, 2);
@@ -307,7 +337,7 @@ const HANDLERS = {
         ? `사주에 안정적인 배우자 별(${a.partner.jeongName})이 있어, 진지한 관계로 이어지는 힘이 있어요.`
         : '배우자 별이 원국에 뚜렷하지 않아, 운에서 그 별이 들어오는 해에 결혼 이야기가 빠르게 진행될 수 있어요.';
     return {
-      text: `결혼 이야기라니, 설렌다냥! 💍\n\n🔮 **사주로 보면**\n${palace}\n앞으로 5년 중 결혼·약속 기운이 강한 해는 **${pickYears.map((y) => `${y.year}년(${y.pillar.hangul}년, ${y.reason.label})`).join('**, **')}**이에요.\n배우자 자리로 보면, ${a.spouse}\n\n💡 **해결책**\n• 결혼 이야기는 돈·집·가족 세 가지 주제부터 가볍게 꺼내 보기\n• 1박 2일 여행으로 생활 습관 맞춰 보기\n• ${a.profile.tips[1]}`,
+      text: `결혼 이야기라니, 설렌다냥! 💍\n\n🔮 **사주로 보면**\n${palace}\n앞으로 5년 중 결혼·약속 기운이 강한 해는 **${pickYears.map((y) => `${y.year}년(${y.pillar.hangul}년, ${y.reason.label})`).join('**, **')}**이에요.\n배우자 자리로 보면, ${a.spouse}\n\n💡 **해결책**\n• 결혼 이야기는 돈·집·가족 세 가지 주제부터 가볍게 꺼내 보기\n• 1박 2일 여행으로 생활 습관 맞춰 보기\n• ${a.profile.tips[1]}` + (marriage ? `\n\n💍 **결혼운 화면으로 보면** 앞으로 10년 중 좋은 해는 ${marriage.best.map((y) => `${y.year}년`).join(', ')}이고, 결혼 생활은 "${marriage.life.title}"이에요.${marriage.withPartner ? ` ${marriage.withPartner.name}님과의 결혼 궁합은 ${marriage.withPartner.score}점(${marriage.withPartner.grade})!` : ''}` : ''),
       expr: 'sparkle', chips: ['우리 커플 궁합은?', '올해 연애운은?', '내 이상형은?'],
     };
   },
@@ -401,7 +431,7 @@ const HANDLERS = {
     };
   },
 
-  period({ a, fc, text, status }) {
+  period({ a, fc, text, status, month }) {
     const couple = status === 'couple';
     const cur = fc.current.sajuYear;
     let item, title;
@@ -409,10 +439,14 @@ const HANDLERS = {
     else if (text.includes('이번 달') || text.includes('이번달')) { item = fc.months[0]; title = `${monthName(item, cur)} 연애운`; }
     else if (text.includes('내년')) { item = fc.years[1]; title = `${item.year}년 연애운`; }
     else { item = fc.years[0]; title = `${item.year}년 연애운`; }
-    return {
+    const monthLine = month && (text.includes('이번 달') || text.includes('이번달'))
+      ? `\n\n🗓️ **이달 리포트로 보면** 좋은 날은 ${month.best.map((d) => `${month.m}/${d.d}`).join(', ')}, 조심할 날은 ${month.care.map((d) => `${month.m}/${d.d}`).join(', ')}이에요.` : '';
+    const out = {
       text: `${title}을 펼쳐 볼게냥! 🔮\n\n**${item.score}점 · ${item.grade.emoji} ${item.grade.label}** — ${item.reason.emoji} ${item.reason.label}\n${couple ? item.reason.couple : item.reason.solo}\n${item.bad.length && item.main !== item.bad[0] ? `다만 ${REASON_LABEL(item.bad[0])} 기운도 함께 있으니 살짝 조심!` : ''}\n\n💡 **해결책**\n• ${item.reason.tip}\n• 이 시기의 행운 장소: ${a.luck.places[1] || a.luck.places[0]}\n• 행운 컬러 **${a.luck.color}**`,
       expr: item.score >= 70 ? 'sparkle' : item.score >= 55 ? 'smile' : 'think', chips: ['다음 달 연애운은?', '내년 연애운은?', '애인은 언제 생길까?'],
     };
+    out.text += monthLine;
+    return out;
   },
 
   self({ a }) {

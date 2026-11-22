@@ -225,3 +225,51 @@ export function futureAvatar(r) {
     <text x="172" y="200" text-anchor="middle" font-size="30" font-family="Black Han Sans, sans-serif" fill="${ink}" opacity=".85">?</text>
   </svg>`;
 }
+
+/* ───────────── 🎬 첫 만남 장면 · 닮은 프리셋 ───────────── */
+
+const SCENE_TIME = { wood: '햇살 좋은 오전', fire: '노을 지는 저녁', earth: '느긋한 주말 오후', metal: '맑게 갠 오후', water: '비가 그친 밤' };
+const SEASON_SCENE = { 봄: '벚꽃잎이 흩날리는', 여름: '매미 소리가 들리는', 가을: '낙엽이 바스락거리는', 겨울: '입김이 하얗게 나는' };
+const FIRST_LINE = {
+  E: ['"여기 자주 오세요? 처음 보는 얼굴이라서요."', '"혹시 이거 같이 하실래요?"'],
+  I: ['"저… 이거 떨어뜨리셨어요."', '"아, 죄송해요. 먼저 가세요."'],
+};
+const MY_LINE = {
+  wood: '"저도 이거 좋아해요! 어떻게 알게 됐어요?"', fire: '"와, 진짜요? 완전 신기하다!"',
+  earth: '"괜찮으시면 같이 가도 될까요?"', metal: '"감사해요. 덕분에 살았어요."', water: '"이야기가 잘 통하는 것 같아요."',
+};
+
+export function firstMeetScene(r) {
+  const s = r.when.season;
+  const ei = r.mbti.type[0];
+  return {
+    caption: `${r.when.year}년 ${r.when.month}월, ${SEASON_SCENE[s]} ${s}`,
+    time: SCENE_TIME[r.look.palaceEl],
+    where: r.meets[0].where, place: r.places[0], detail: r.meets[0].detail,
+    notice: `${r.look.style} 차림에 ${r.look.eyes}`,
+    theirLine: FIRST_LINE[ei][r.when.month % 2],
+    myLine: MY_LINE[r.a.dmEl],
+    sign: ei === 'E' ? '먼저 말을 걸어오는 쪽은 그 사람이에요.' : '그 사람은 수줍어서 먼저 다가오지 못해요. 눈이 마주치면 내가 먼저 웃어 주세요.',
+  };
+}
+
+/** 프리셋 중 미리 인연의 사주 조건과 닮은 사람 */
+export function similarPresets(r, people) {
+  const myYear = r.a.solar ? r.a.solar.year : r.a.person.year;
+  return people.map(({ id, x }) => {
+    const hits = [];
+    if (x.gender !== r.gender) return null;
+    if (x.dmEl === r.look.el) hits.push('인연의 별 기운');
+    if (BRANCH_ELEMENT[x.dayBranch] === r.look.palaceEl) hits.push('배우자 자리 분위기');
+    const y = x.solar ? x.solar.year : x.person.year;
+    const dir = y < myYear ? 'older' : y > myYear ? 'younger' : 'same';
+    if (dir === r.age.top.key) hits.push(r.age.top.label);
+    if (x.dm === r.a.bestMatchStem) hits.push('천간합');
+    return hits.length >= 2 ? { id, name: x.name, emoji: x.profile.emoji, hits } : null;
+  }).filter(Boolean).sort((p, q) => q.hits.length - p.hits.length).slice(0, 2);
+}
+
+export function summaryFutureForAI(r) {
+  if (!r) return '';
+  return `미리 인연(미래의 ${r.word}): ${r.when.year}년 ${r.when.month}월쯤 "${r.meets.map((m) => m.where).join('·')}"에서 만남 / 생김새 ${r.look.face}·${r.look.eyes}·${r.look.hair}, 분위기 ${r.look.vibe}, 체형 ${r.look.body} / 키 ${r.height.min}~${r.height.max}cm / MBTI ${r.mbti.type}(또는 ${r.mbti.alt}) / ${r.age.gap}`;
+}
