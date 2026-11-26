@@ -1850,6 +1850,7 @@ function viewChat() {
       <label class="sr" for="chat-input">고민 입력</label>
       <textarea id="chat-input" name="q" rows="1" maxlength="800" placeholder="연애 고민을 편하게 적어 주세요" required></textarea>
       <button class="btn btn--pink" type="submit">보내기</button>
+      <p class="chat__count" id="chat-count" aria-live="polite" hidden></p>
     </form>
   </section>`;
 }
@@ -2082,6 +2083,7 @@ app.addEventListener('submit', (ev) => {
   ev.preventDefault();
   if (kind === 'chat') {
     const ta = form.querySelector('textarea');
+    setTimeout(() => fitChatInput(ta), 0);
     const q = ta.value;
     ta.value = '';
     ask(q);
@@ -2120,8 +2122,24 @@ app.addEventListener('submit', (ev) => {
   }
 });
 
+// 상담실 입력칸: 쓴 만큼 커져서 한눈에 보이게 (최대 화면 45%까지, 그 뒤로는 스크롤)
+const CHAT_MAX = 800;
+function fitChatInput(ta) {
+  if (!ta) return;
+  ta.style.height = 'auto';
+  ta.style.height = ta.value ? `${ta.scrollHeight + 5}px` : '';
+  const count = document.getElementById('chat-count');
+  if (count) {
+    const n = ta.value.length;
+    count.hidden = n < 40;
+    count.textContent = `${n} / ${CHAT_MAX}자`;
+    count.classList.toggle('is-near', n >= CHAT_MAX - 50);
+  }
+}
+
 app.addEventListener('input', (ev) => {
   const t = ev.target;
+  if (t.id === 'chat-input') { fitChatInput(t); return; }
   const form = t.closest('form.talisman');
   if (!form) return;
   // 오류 문구는 입력하는 동안 지운다 (버튼을 누를 때 지우면 레이아웃이 밀려 탭이 빗나감)
