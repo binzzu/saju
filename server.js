@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
-import { SYSTEM_PROMPT, contextBlock, todayKST } from './public/js/persona.js';
+import { systemFor, contextBlock, todayKST } from './public/js/persona.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(here, 'public');
@@ -66,7 +66,8 @@ function validateChat(body) {
   while (messages.length && messages[0].role !== 'user') messages.shift();
   if (!messages.length || messages[messages.length - 1].role !== 'user') return null;
   const context = typeof body.context === 'string' ? body.context.slice(0, 8000) : '';
-  return { messages, context };
+  const who = body.counselor === 'coco' ? 'coco' : 'myo';
+  return { messages, context, who };
 }
 
 async function handleChat(req, res) {
@@ -91,7 +92,7 @@ async function handleChat(req, res) {
     output_config: { effort: EFFORT },
     cache_control: { type: 'ephemeral' },
     system: [
-      { type: 'text', text: SYSTEM_PROMPT },
+      { type: 'text', text: systemFor(input.who) },
       { type: 'text', text: contextBlock(input.context, today) },
     ],
     messages: input.messages,

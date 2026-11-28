@@ -1,5 +1,6 @@
 // 화면과 분리된 도구 모음 — 궁합 초대 링크 · 캘린더(.ics) · 데이터 백업 · 오늘의 고양이 카드
 import { sanitizePerson, loadPresets } from './presets.js';
+import { cleanDiary } from './diary.js';
 
 /* ───────────── 💌 궁합 초대 링크 ───────────── */
 
@@ -57,7 +58,7 @@ export function makeIcs(events, nowMs = Date.now()) {
 
 /* ───────────── 💾 데이터 백업·복원 ───────────── */
 
-export const BACKUP_KEYS = ['me', 'partner', 'presets', 'pair', 'anniv', 'affinity', 'catcard', 'theme', 'futureWant', 'chat'];
+export const BACKUP_KEYS = ['me', 'partner', 'presets', 'pair', 'anniv', 'affinity', 'catcard', 'theme', 'futureWant', 'chat', 'diary', 'chatArchive', 'counselor', 'bondId', 'bondKind', 'guideSeen'];
 
 export function makeBackup(get, nowMs = Date.now()) {
   const data = {};
@@ -82,10 +83,18 @@ export function parseBackup(text) {
   }
   if (['light', 'dark'].includes(d.theme)) out.theme = d.theme;
   if (['M', 'F'].includes(d.futureWant)) out.futureWant = d.futureWant;
-  if (Array.isArray(d.chat)) {
-    out.chat = d.chat.filter((m) => m && ['user', 'assistant'].includes(m.role) && typeof m.content === 'string')
-      .slice(-60).map((m) => ({ role: m.role, content: m.content.slice(0, 4000), ...(typeof m.expr === 'string' ? { expr: m.expr.slice(0, 12) } : {}) }));
+  const cleanMsgs = (list) => list.filter((m) => m && ['user', 'assistant'].includes(m.role) && typeof m.content === 'string')
+    .slice(-60).map((m) => ({ role: m.role, content: m.content.slice(0, 4000), ...(typeof m.expr === 'string' ? { expr: m.expr.slice(0, 12) } : {}), ...(m.who === 'coco' ? { who: 'coco' } : {}) }));
+  if (Array.isArray(d.chat)) out.chat = cleanMsgs(d.chat);
+  if (d.diary) out.diary = cleanDiary(d.diary);
+  if (Array.isArray(d.chatArchive)) {
+    out.chatArchive = d.chatArchive.filter((x) => x && typeof x.id === 'string' && Array.isArray(x.msgs)).slice(0, 20)
+      .map((x) => ({ id: x.id.slice(0, 30), title: String(x.title || '').slice(0, 40), at: String(x.at || '').slice(0, 10), who: x.who === 'coco' ? 'coco' : 'myo', msgs: cleanMsgs(x.msgs) }));
   }
+  if (['myo', 'coco'].includes(d.counselor)) out.counselor = d.counselor;
+  if (typeof d.bondId === 'string') out.bondId = d.bondId.slice(0, 40);
+  if (['friend', 'sibling', 'family', 'work'].includes(d.bondKind)) out.bondKind = d.bondKind;
+  if (d.guideSeen === true) out.guideSeen = true;
   return out;
 }
 

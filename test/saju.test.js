@@ -21,6 +21,12 @@ import { futurePartner, futureAvatar, firstMeetScene, similarPresets, summaryFut
 import { analyzeMarriage, summaryMarriageForAI } from '../public/js/marriage.js';
 import { encodeInvite, decodeInvite, makeIcs, makeBackup, parseBackup, CAT_CARDS, dailyCardIndex } from '../public/js/tools.js';
 import { summaryExtrasForAI } from '../public/js/extras.js';
+import { analyzeBond, BOND_KINDS } from '../public/js/bond.js';
+import { cleanDiary, diaryMonth, MOODS } from '../public/js/diary.js';
+import { GLOSSARY } from '../public/js/glossary.js';
+import { cocoTone } from '../public/js/counsel.js';
+import { systemFor } from '../public/js/persona.js';
+import { readdirSync, readFileSync } from 'node:fs';
 import {
   PRESET_LIMIT, personKey, loadPresets, upsertPreset, removePreset, restorePreset, shortBirth,
 } from '../public/js/presets.js';
@@ -582,4 +588,67 @@ test('상담실: 새 결과(미리 인연·기념일·결혼운·썸)를 답에 
   assert.match(c.respond('고백하기 좋은 날은?').text, /썸 성공 확률로 보면/);
   assert.match(summaryExtrasForAI({ ssum: ctx.ssum, anniv: ctx.anniv }), /썸 성공 확률.*\n기념일/);
   assert.equal(detectTopic('미리 인연 알려줘'), 'future');
+});
+
+test('우정·가족 궁합: 관계 종류마다 점수·등급·잘 맞는 점·부딪히는 점', () => {
+  const a = person('민지', 'F', 1997, 3, 14, 9), b = person('수아', 'F', 1997, 8, 1, 10);
+  for (const kind of Object.keys(BOND_KINDS)) {
+    const r = analyzeBond(a, b, kind);
+    assert.ok(r.score >= 40 && r.score <= 98);
+    assert.ok(r.grade && r.line && r.together);
+    assert.ok(r.good.length >= 1 && r.bad.length >= 1);
+    assert.equal(r.kind, kind);
+  }
+  assert.equal(analyzeBond(a, b, '이상한값').kind, 'friend');
+  // 같은 두 사람이면 관계 종류와 상관없이 점수는 같고 등급 이름만 달라진다
+  assert.equal(analyzeBond(a, b, 'work').score, analyzeBond(a, b, 'friend').score);
+});
+
+test('연애 일기: 저장값 검사, 한 달 통계와 운세 일치율', () => {
+  const clean = cleanDiary({ '2026-11-01': { mood: 5, text: '좋아' }, '2026-11-02': { mood: 9 }, nope: { mood: 3 }, '2026-11-03': { mood: 2, text: 'x'.repeat(500) } });
+  assert.deepEqual(Object.keys(clean), ['2026-11-01', '2026-11-03']);
+  assert.equal(clean['2026-11-03'].text.length, 200);
+  const a = person('민지', 'F', 1997, 3, 14, 9);
+  const st = diaryMonth(a, { '2026-11-01': { mood: 5, text: '' }, '2026-11-05': { mood: 1, text: '' }, '2026-11-09': { mood: 3, text: '' }, '2026-10-30': { mood: 4, text: '' } }, 2026, 11);
+  assert.equal(st.count, 3);
+  assert.deepEqual(st.entries.map((e) => e.d), [9, 5, 1]);
+  assert.ok(st.rate >= 0 && st.rate <= 100 && st.verdict);
+  assert.equal(diaryMonth(a, { '2026-11-01': { mood: 5, text: '' } }, 2026, 11).rate, null); // 3일 미만은 일치율 없음
+  assert.equal(MOODS.length, 5);
+});
+
+test('용어 사전: 풀이에 자주 나오는 용어가 모두 있다', () => {
+  for (const t of ['일간', '오행', '도화살', '정관', '편재', '천간합', '배우자 자리', '대운']) assert.ok(GLOSSARY[t], t);
+});
+
+test('코코 상담: 냥 말투를 존댓말로 바꾸고 내용은 지킨다', () => {
+  const out = cocoTone('결혼 이야기라니, 설렌다냥! 💍\n\n🔮 **사주로 보면**\n좋은 해는 **2027년**이다냥. 그때 봐라냥.');
+  assert.doesNotMatch(out, /냥/);
+  assert.match(out, /설레요!/);
+  assert.match(out, /\*\*2027년\*\*이에요/);
+  assert.match(out, /봐요\./);
+  assert.match(out, /코코/);
+  assert.match(systemFor('coco'), /이번 상담사: 코코/);
+  assert.equal(systemFor('myo'), SYSTEM_PROMPT);
+});
+
+test('오프라인 캐시: 서비스 워커가 모든 화면 파일을 미리 저장한다', () => {
+  const sw = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
+  for (const f of readdirSync(new URL('../public/js/', import.meta.url))) if (f.endsWith('.js')) assert.ok(sw.includes(`'js/${f}'`), f);
+  for (const f of ['index.html', 'css/style.css', 'manifest.webmanifest']) assert.ok(sw.includes(`'${f}'`), f);
+  assert.match(sw, /api\//); // AI 상담은 저장하지 않는다
+});
+
+test('백업: 일기·상담 보관함·상담사도 검사해서 되살린다', () => {
+  const back = parseBackup(JSON.stringify({ app: 'myoyeon-saju', v: 1, data: {
+    diary: { '2026-11-01': { mood: 4, text: '굿' }, bad: 1 },
+    chatArchive: [{ id: 'c1', title: '고민', at: '2026-11-01', who: 'coco', msgs: [{ role: 'user', content: '안녕' }, { role: 'system', content: 'x' }] }, { nope: 1 }],
+    counselor: 'coco', bondKind: 'family', guideSeen: true,
+  } }));
+  assert.deepEqual(back.diary, { '2026-11-01': { mood: 4, text: '굿' } });
+  assert.equal(back.chatArchive.length, 1);
+  assert.equal(back.chatArchive[0].msgs.length, 1);
+  assert.equal(back.counselor, 'coco');
+  assert.equal(back.bondKind, 'family');
+  assert.equal(back.guideSeen, true);
 });
